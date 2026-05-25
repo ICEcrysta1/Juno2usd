@@ -13,6 +13,8 @@ from ..models import FuselageParams, RawGeometry
 class FairingPart(PartBase):
     """Fairing1 — 空心整流罩主体。"""
 
+    DEFAULT_WALL_THICKNESS: float = 0.045
+
     def generate(self, params: FuselageParams, segments: int) -> RawGeometry:
         return generate_cylinder_geometry(
             part_id="",
@@ -21,6 +23,7 @@ class FairingPart(PartBase):
             params=params,
             segments=segments,
             is_hollow=True,
+            wall_thickness=self.DEFAULT_WALL_THICKNESS,
         )
 
     def find_parent(self, part_id: str, connections: dict[str, Optional[str]]) -> Optional[str]:
