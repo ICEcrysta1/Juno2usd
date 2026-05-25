@@ -60,6 +60,7 @@ class NormalService:
         top_corners = ring_info.get("top_corners", (1.0, 1.0, 1.0, 1.0))
         is_inlet = ring_info.get("is_inlet", False)
         part_type = ring_info.get("part_type", "")
+        smooth_groups = ring_info.get("smooth_groups", {})
 
         vertices = geom.vertices
         raw_faces = geom.faces
@@ -104,15 +105,25 @@ class NormalService:
                 elif verts.issubset(bot_set | top_set):
                     outer_side.add(fi)
 
-        # 侧面法线（带角度拆分）
-        side_map = self._angle_split_normals(
-            vertices, raw_faces, outer_side, normals
-        )
+        # 侧面法线 — 优先使用零件提供的 smooth_groups
+        if smooth_groups:
+            side_map = self._normals_by_groups(
+                vertices, raw_faces, outer_side, smooth_groups, normals
+            )
+        else:
+            side_map = self._angle_split_normals(
+                vertices, raw_faces, outer_side, normals
+            )
         inner_side_map: Dict[int, int] = {}
         if is_inlet and inner_side:
-            inner_side_map = self._angle_split_normals(
-                vertices, raw_faces, inner_side, normals
-            )
+            if smooth_groups:
+                inner_side_map = self._normals_by_groups(
+                    vertices, raw_faces, inner_side, smooth_groups, normals
+                )
+            else:
+                inner_side_map = self._angle_split_normals(
+                    vertices, raw_faces, inner_side, normals
+                )
 
         # 端盖法线（圆柱端盖，径向）
         cap_map: Dict[int, int] = {}
@@ -240,6 +251,7 @@ class NormalService:
         inner_ring_indices: Optional[List[List[int]]] = ring_info.get("inner_ring_indices")
         is_hollow = ring_info.get("is_hollow", False)
         has_bottom_cap = ring_info.get("has_bottom_cap", True)
+        smooth_groups = ring_info.get("smooth_groups", {})
 
         vertices = geom.vertices
         raw_faces = geom.faces
@@ -300,15 +312,23 @@ class NormalService:
                 else:
                     side_set.add(fi)
 
-        # 侧面法线
-        side_nm = self._smooth_group_normals(vertices, raw_faces, side_set, normals)
-        cap_nm = self._smooth_group_normals(vertices, raw_faces, cap_bot_set, normals)
+        # 侧面法线 — 优先使用零件提供的 smooth_groups
+        if smooth_groups:
+            side_nm = self._normals_by_groups(vertices, raw_faces, side_set, smooth_groups, normals)
+            cap_nm = self._normals_by_groups(vertices, raw_faces, cap_bot_set, smooth_groups, normals)
+        else:
+            side_nm = self._smooth_group_normals(vertices, raw_faces, side_set, normals)
+            cap_nm = self._smooth_group_normals(vertices, raw_faces, cap_bot_set, normals)
 
         inner_side_nm: Dict[int, int] = {}
         inner_cap_nm: Dict[int, int] = {}
         if is_hollow and inner_ring_indices:
-            inner_side_nm = self._smooth_group_normals(vertices, raw_faces, inner_side_set, normals, invert=True)
-            inner_cap_nm = self._smooth_group_normals(vertices, raw_faces, inner_cap_bot_set, normals)
+            if smooth_groups:
+                inner_side_nm = self._normals_by_groups(vertices, raw_faces, inner_side_set, smooth_groups, normals, invert=True)
+                inner_cap_nm = self._normals_by_groups(vertices, raw_faces, inner_cap_bot_set, smooth_groups, normals)
+            else:
+                inner_side_nm = self._smooth_group_normals(vertices, raw_faces, inner_side_set, normals, invert=True)
+                inner_cap_nm = self._smooth_group_normals(vertices, raw_faces, inner_cap_bot_set, normals)
 
         # 组装面
         faces_out: list = []
@@ -537,7 +557,56 @@ class NormalService:
 
         return result
 
-    # ---- 平滑组法线（鼻锥用） ----
+    # ---- 按预计算 smooth_groups 做法线（零件决定硬边） ----
+
+    def _normals_by_groups(
+        self,
+        vertices: List[Tuple[float, float, float]],
+        raw_faces: List[Tuple],
+        face_indices: Set[int],
+        smooth_groups: Dict[int, int],
+        normals: List[Tuple[float, float, float]],
+        invert: bool = False,
+    ) -> Dict[int, int]:
+        """使用预计算的 smooth_groups 计算顶点法线。
+
+        同一 (顶点, group_id) 内平均面法线，不同 group 间法线拆分（硬边）。
+
+        Returns:
+            顶点索引 -> 法线索引的映射。
+        """
+        # (v_idx, group_id) -> 累加法线
+        vg_acc: Dict[Tuple[int, int], List[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+
+        for fi in face_indices:
+            gid = smooth_groups.get(fi, 0)
+            fn = self._calc_face_normal(vertices,
+                                        raw_faces[fi][0],
+                                        raw_faces[fi][1],
+                                        raw_faces[fi][2])
+            if invert:
+                fn = (-fn[0], -fn[1], -fn[2])
+            for corner in range(3):
+                v = raw_faces[fi][corner]
+                key = (v, gid)
+                vg_acc[key][0] += fn[0]
+                vg_acc[key][1] += fn[1]
+                vg_acc[key][2] += fn[2]
+
+        # 归一化
+        result: Dict[int, int] = {}
+        for (v, gid), acc in vg_acc.items():
+            length = math.sqrt(acc[0]**2 + acc[1]**2 + acc[2]**2)
+            if length > EPSILON:
+                fn = (acc[0]/length, acc[1]/length, acc[2]/length)
+            else:
+                fn = (0.0, 1.0, 0.0)
+            result[v] = len(normals)
+            normals.append(fn)
+
+        return result
+
+    # ---- 平滑组法线（鼻锥用，无预计算 smooth_groups 时的 fallback） ----
 
     def _smooth_group_normals(
         self,
