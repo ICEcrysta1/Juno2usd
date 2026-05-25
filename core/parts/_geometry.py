@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Tuple
+from collections import defaultdict
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
 from ..models import FuselageParams, RawGeometry
-from ..utils.constants import EPSILON
+from ..utils.constants import EPSILON, HARD_EDGE_ANGLE_DEG
 from ..utils.math3d import apply_clamp, get_rounded_rect_point, rotation_matrix
 
 
@@ -220,6 +221,34 @@ def generate_cylinder_geometry(
         vertical_shear,
     )
 
+    # 分类面（侧面 vs 端盖）并计算平滑组
+    bot_set = {idx for idx, _ in bottom_indices}
+    top_set = {idx for idx, _ in top_indices}
+    bot_in_set = {idx for idx, _ in bottom_inner_indices} if is_hollow and bottom_inner_indices else set()
+    top_in_set = {idx for idx, _ in top_inner_indices} if is_hollow and top_inner_indices else set()
+
+    side_set: Set[int] = set()
+    cap_set: Set[int] = set()
+
+    for fi, face in enumerate(geom.faces):
+        verts = {face[0], face[1], face[2]}
+        if is_hollow and bot_in_set and top_in_set:
+            is_cap = (
+                verts.issubset(bot_set | bot_in_set) or
+                verts.issubset(top_set | top_in_set)
+            )
+        else:
+            is_cap = (
+                verts.issubset(bot_set) or
+                verts.issubset(top_set)
+            )
+        if is_cap:
+            cap_set.add(fi)
+        else:
+            side_set.add(fi)
+
+    smooth_groups = classify_smooth_groups(geom.vertices, geom.faces, side_set, cap_set)
+
     # ring_info
     geom.ring_info = {
         "bottom_indices": [idx for idx, _ in bottom_indices],
@@ -234,6 +263,7 @@ def generate_cylinder_geometry(
         "segments": segments,
         "bottom_is_point": bottom_is_point,
         "top_is_point": top_is_point,
+        "smooth_groups": smooth_groups,
     }
 
     return geom
@@ -563,6 +593,30 @@ def generate_cone_geometry(
                 bn = bottom_ring[ni]
                 geom.faces.append((vc, bi[0], bn[0], vtc, bi[1], bn[1], geom.material_name, part_type))
 
+    # 分类面（侧面 vs 端盖）并计算平滑组
+    bottom_ring_set = set(ring_indices[0][i][0] for i in range(len(ring_indices[0])))
+    if is_hollow and inner_ring_indices:
+        bottom_ring_set.update(i[0] for i in inner_ring_indices[0])
+    all_ring_verts = set()
+    for ring in ring_indices:
+        all_ring_verts.update(i[0] for i in ring)
+    max_ring_v = max(all_ring_verts) if all_ring_verts else -1
+
+    side_set: Set[int] = set()
+    cap_set: Set[int] = set()
+
+    for fi, face in enumerate(geom.faces):
+        verts = {face[0], face[1], face[2]}
+        # 端盖面特征：纯底面环顶点，或包含中心顶点（实心锥底部）
+        if verts.issubset(bottom_ring_set):
+            cap_set.add(fi)
+        elif any(v > max_ring_v for v in verts):
+            cap_set.add(fi)
+        else:
+            side_set.add(fi)
+
+    smooth_groups = classify_smooth_groups(geom.vertices, geom.faces, side_set, cap_set)
+
     geom.ring_info = {
         "ring_indices": [[idx for idx, _ in ring] for ring in ring_indices],
         "inner_ring_indices": [[idx for idx, _ in ring] for ring in inner_ring_indices] if is_hollow and inner_ring_indices else None,
@@ -572,6 +626,116 @@ def generate_cone_geometry(
         "segments": segments,
         "subdivisions": subdivisions,
         "has_bottom_cap": has_bottom,
+        "smooth_groups": smooth_groups,
     }
 
     return geom
+
+
+# ============================================================
+# Smooth Group 分类 — 零件决定硬边位置，NormalService 通用执行
+# ============================================================
+
+def classify_smooth_groups(
+    vertices: List[Tuple[float, float, float]],
+    raw_faces: List[Tuple],
+    side_face_indices: Set[int],
+    cap_face_indices: Set[int],
+) -> Dict[int, int]:
+    """基于面法线夹角给面分平滑组。
+
+    侧面按角度检测硬边 → 拆分为不同平滑组。
+    端盖面统一分到独立组。
+
+    Args:
+        vertices: 局部顶点列表。
+        raw_faces: 8 值面元组列表。
+        side_face_indices: 侧面面索引集合。
+        cap_face_indices: 端盖面索引集合。
+
+    Returns:
+        {face_index: group_id} 映射。
+    """
+    threshold_rad = math.radians(HARD_EDGE_ANGLE_DEG)
+    smooth_groups: Dict[int, int] = {}
+
+    if not side_face_indices:
+        for fi in cap_face_indices:
+            smooth_groups[fi] = 0
+        return smooth_groups
+
+    # 1. 计算侧面面法线
+    face_normals: Dict[int, Tuple[float, float, float]] = {}
+    for fi in side_face_indices:
+        face_normals[fi] = _calc_face_normal(vertices, raw_faces[fi])
+
+    # 2. 构建边-面邻接
+    edge_faces: Dict[Tuple[int, int], List[int]] = defaultdict(list)
+    for fi in side_face_indices:
+        f = raw_faces[fi]
+        v1, v2, v3 = f[0], f[1], f[2]
+        for edge in ((min(v1, v2), max(v1, v2)),
+                     (min(v2, v3), max(v2, v3)),
+                     (min(v3, v1), max(v3, v1))):
+            edge_faces[edge].append(fi)
+
+    # 3. 检测锐边
+    sharp_edges: Set[Tuple[int, int]] = set()
+    for edge, adj in edge_faces.items():
+        if len(adj) == 2:
+            n1 = face_normals[adj[0]]
+            n2 = face_normals[adj[1]]
+            dot = max(-1.0, min(1.0, n1[0]*n2[0] + n1[1]*n2[1] + n1[2]*n2[2]))
+            if math.acos(dot) > threshold_rad:
+                sharp_edges.add(edge)
+
+    # 4. 洪水填充平滑组
+    current_group = 0
+
+    def flood(start: int, gid: int) -> None:
+        stack = [start]
+        smooth_groups[start] = gid
+        while stack:
+            fi = stack.pop()
+            f = raw_faces[fi]
+            v1, v2, v3 = f[0], f[1], f[2]
+            for edge in ((min(v1, v2), max(v1, v2)),
+                         (min(v2, v3), max(v2, v3)),
+                         (min(v3, v1), max(v3, v1))):
+                if edge not in sharp_edges:
+                    for af in edge_faces[edge]:
+                        if af in side_face_indices and af not in smooth_groups:
+                            smooth_groups[af] = gid
+                            stack.append(af)
+
+    for fi in side_face_indices:
+        if fi not in smooth_groups:
+            flood(fi, current_group)
+            current_group += 1
+
+    # 5. 端盖面分到独立组
+    for fi in cap_face_indices:
+        smooth_groups[fi] = current_group
+        current_group += 1
+
+    return smooth_groups
+
+
+def _calc_face_normal(
+    vertices: List[Tuple[float, float, float]], face: Tuple
+) -> Tuple[float, float, float]:
+    """计算面单位法线。"""
+    v1, v2, v3 = face[0], face[1], face[2]
+    nv = len(vertices)
+    if v1 >= nv or v2 >= nv or v3 >= nv:
+        return (0.0, 1.0, 0.0)
+    p1, p2, p3 = vertices[v1], vertices[v2], vertices[v3]
+    e1 = (p2[0]-p1[0], p2[1]-p1[1], p2[2]-p1[2])
+    e2 = (p3[0]-p1[0], p3[1]-p1[1], p3[2]-p1[2])
+    nx = e1[1]*e2[2] - e1[2]*e2[1]
+    ny = e1[2]*e2[0] - e1[0]*e2[2]
+    nz = e1[0]*e2[1] - e1[1]*e2[0]
+    length = math.sqrt(nx**2 + ny**2 + nz**2)
+    if length > EPSILON:
+        return (nx/length, ny/length, nz/length)
+    return (0.0, 1.0, 0.0)
