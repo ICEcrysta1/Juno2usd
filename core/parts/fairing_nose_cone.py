@@ -17,6 +17,7 @@ class FairingNoseConePart(PartBase):
     DEFAULT_WALL_THICKNESS: float = 0.045
 
     def generate(self, params: FuselageParams, segments: int) -> RawGeometry:
+        bottom_flat = params.flatten_normals in ("Bottom", "Both")
         return generate_cone_geometry(
             part_id="",
             material_name="",
@@ -26,6 +27,11 @@ class FairingNoseConePart(PartBase):
             is_hollow=True,
             wall_thickness=self.DEFAULT_WALL_THICKNESS,
             subdivisions=self.DEFAULT_SUBDIVISIONS,
+            smooth_policy={
+                "outer_side": "angle_split",
+                "inner_side": "angle_split",
+                "bottom_cap": "independent" if bottom_flat else "merge_outer_side",
+            },
         )
 
     def find_parent(self, part_id: str, connections: dict[str, Optional[str]]) -> Optional[str]:
