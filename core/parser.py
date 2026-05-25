@@ -230,7 +230,7 @@ class SR2XMLParser:
         params.length = params.offset_y * 2
 
         if params.length < 0.001:
-            print(f"[Parser] 警告: {part_data.part_id} offset_y≈0，长度设为默认 1.0")
+            print(f"[Parser] 警告: offset_y≈0，长度设为默认 1.0")
             params.length = 1.0
 
         config = fuselage.find("../Config")
