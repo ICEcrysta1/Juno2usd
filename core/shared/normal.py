@@ -584,7 +584,7 @@ class NormalService:
         smooth_groups: Dict[int, int],
         normals: List[Tuple[float, float, float]],
         invert: bool = False,
-    ) -> Dict[int, int]:
+    ) -> Dict[Tuple[int, int], int]:
         """使用预计算的 smooth_groups 计算顶点法线。
 
         同一 (顶点, group_id) 内平均面法线，不同 group 间法线拆分（硬边）。
