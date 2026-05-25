@@ -16,6 +16,8 @@ class StrutPart(PartBase):
     DEFAULT_CORNER_RADIUS: float = 0.5
 
     def generate(self, params: FuselageParams, segments: int) -> RawGeometry:
+        bottom_flat = params.flatten_normals in ("Bottom", "Both")
+        top_flat = params.flatten_normals in ("Top", "Both")
         return generate_cylinder_geometry(
             part_id="",
             material_name="",
@@ -23,6 +25,11 @@ class StrutPart(PartBase):
             params=params,
             segments=segments,
             is_hollow=False,
+            smooth_policy={
+                "outer_side": "angle_split",
+                "bottom_cap": "independent" if bottom_flat else "merge_outer_side",
+                "top_cap": "independent" if top_flat else "merge_outer_side",
+            },
         )
 
     def find_parent(self, part_id: str, connections: dict[str, Optional[str]]) -> Optional[str]:

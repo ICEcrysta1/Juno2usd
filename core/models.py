@@ -25,6 +25,7 @@ class FuselageParams:
     corner_radiuses: Tuple[float, ...] = (1.0,) * 8
     clamp_distances: Tuple[float, ...] = (1.0,) * 8
     part_scale: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+    flatten_normals: str = ""  # "", "Top", "Bottom", "Both"
 
     @property
     def top_radius_x(self) -> float:
@@ -133,6 +134,7 @@ class PartData:
                 "corner_radiuses": params.corner_radiuses,
                 "clamp_distances": params.clamp_distances,
                 "part_scale": params.part_scale,
+                "flatten_normals": params.flatten_normals,
             }
         else:
             result["fuselage_params"] = None
@@ -167,6 +169,7 @@ class PartData:
                 corner_radiuses=tuple(fp.get("corner_radiuses", (1.0,) * 8)),
                 clamp_distances=tuple(fp.get("clamp_distances", (1.0,) * 8)),
                 part_scale=tuple(fp.get("part_scale", (1.0, 1.0, 1.0))),
+                flatten_normals=fp.get("flatten_normals", ""),
             )
         return part
 
