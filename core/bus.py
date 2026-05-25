@@ -90,7 +90,7 @@ class Bus:
             updated_faces = []
             for face in geom.faces:
                 face_list = list(face)
-                face_list[7] = part.material_name  # 材质在 8 值面元组中索引为 7
+                face_list[6] = part.material_name  # 8 值面: (v1,v2,v3,vt1,vt2,vt3,mat,pid)
                 updated_faces.append(tuple(face_list))
             geom.faces = updated_faces
 

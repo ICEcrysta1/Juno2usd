@@ -7,6 +7,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from .models import Material, MeshData
+from .utils.naming import clean_material_name
 
 
 class MeshMerger:
@@ -31,7 +32,7 @@ class MeshMerger:
         Args:
             materials: Material 对象列表。
         """
-        self._materials = {m.name: m for m in materials}
+        self._materials = {clean_material_name(m.name): m for m in materials}
         print(f"[Merger] 已加载 {len(materials)} 种材质")
 
     def merge_and_export(
@@ -40,7 +41,7 @@ class MeshMerger:
         mesh_prefix: str = "Mesh",
         use_custom_normals: bool = True,
     ) -> None:
-        """合并网格并导出 USDA 文件。
+        """合并网格并导出 USDA 文件。相同材质的零件合并为一个 Mesh。
 
         Args:
             output_file: 输出 .usda 文件路径。
@@ -65,117 +66,125 @@ class MeshMerger:
         material_groups: Dict[str, List[MeshData]] = {}
         for mesh in self._meshes:
             mat_name = mesh.faces[0][9] if mesh.faces else "default"
-            material_groups.setdefault(mat_name, []).append(mesh)
+            if mat_name not in material_groups:
+                material_groups[mat_name] = []
+            material_groups[mat_name].append(mesh)
 
-        mesh_index = 0
+        print(f"[Merger] 材质分组: {len(material_groups)} 组")
+
         for mat_name, group_meshes in material_groups.items():
+            clean_name = clean_material_name(mat_name) if mat_name else "default"
+            mesh_name = f"Mesh_{clean_name}"
+            mesh_path = root_path.AppendChild(mesh_name)
+            mesh_prim = UsdGeom.Mesh.Define(stage, mesh_path)
+
+            # 合并同材质所有零件的顶点/法线/UV/面
+            all_vertices: List[Tuple[float, float, float]] = []
+            all_normals: List[Tuple[float, float, float]] = []
+            all_uvs: List[Tuple[float, float]] = []
+            all_faces_normal_indices: List[Tuple[int, int, int]] = []  # 每面 3 个法线索引（全局偏移后）
+            all_faces_uv_indices: List[Tuple[int, int, int]] = []  # 每面 3 个 UV 索引（全局偏移后）
+            all_face_vertex_indices: List[Tuple[int, int, int]] = []
+
+            v_offset = 0
+            n_offset = 0
+            uv_offset = 0
+
             for mesh in group_meshes:
-                mesh_name = f"Mesh_{mesh_index}"
-                mesh_path = root_path.AppendChild(mesh_name)
-                mesh_prim = UsdGeom.Mesh.Define(stage, mesh_path)
-
-                vertices = mesh.vertices
-                normals = mesh.normals
-                uvs = mesh.uvs
-                faces = mesh.faces
-
                 # 过滤退化面
                 valid_faces = []
-                for face in faces:
-                    *face_data, mat, pid = face
-                    v1, v2, v3 = face_data[0], face_data[1], face_data[2]
+                for face in mesh.faces:
+                    v1, v2, v3 = face[0], face[1], face[2]
                     if v1 != v2 and v2 != v3 and v3 != v1:
                         valid_faces.append(face)
-                faces = valid_faces
 
-                if not faces:
+                if not valid_faces:
                     continue
 
-                # 本地索引重映射
-                global_to_local: Dict[Tuple[int, int], Tuple[int, List[Tuple]]] = {}
-                local_vertices: List[Tuple[float, float, float]] = []
-                local_faces: List[List[int]] = []
+                # 收集该 mesh 实际使用的顶点/法线/UV，并建立本地→全局映射
+                local_to_global_v: Dict[int, int] = {}
+                local_to_global_n: Dict[int, int] = {}
+                local_to_global_uv: Dict[int, int] = {}
 
-                for face in faces:
-                    local_face: List[int] = []
+                for face in valid_faces:
                     for corner in range(3):
-                        v_idx = face[corner]
-                        vt_idx = face[corner + 3]
-                        key = (v_idx, vt_idx)
+                        vi = face[corner]
+                        ni = face[corner + 6]
+                        uvi = face[corner + 3]
 
-                        if key not in global_to_local:
-                            li = len(local_vertices)
-                            global_to_local[key] = (li, [])
-                            local_vertices.append(vertices[v_idx])
-                        local_face.append(global_to_local[key][0])
-                    local_faces.append(local_face)
+                        if vi not in local_to_global_v:
+                            local_to_global_v[vi] = len(all_vertices)
+                            all_vertices.append(mesh.vertices[vi])
 
-                # 设置顶点
-                mesh_prim.CreatePointsAttr([Gf.Vec3f(*v) for v in local_vertices])
-
-                # 设置法线
-                if use_custom_normals and normals:
-                    face_varying_normals: List[Gf.Vec3f] = []
-                    for face in faces:
-                        for corner in range(3):
-                            v_idx = face[corner]
-                            vt_idx = face[corner + 3]
-                            ni = face[corner + 6]
-                            if 0 <= ni < len(normals):
-                                face_varying_normals.append(Gf.Vec3f(*normals[ni]))
+                        if 0 <= ni < len(mesh.normals) and ni not in local_to_global_n:
+                            local_to_global_n[ni] = len(all_normals)
+                            if use_custom_normals:
+                                all_normals.append(mesh.normals[ni])
                             else:
-                                face_varying_normals.append(Gf.Vec3f(0.0, 1.0, 0.0))
-                    mesh_prim.CreateNormalsAttr(face_varying_normals)
-                    mesh_prim.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+                                all_normals.append((0.0, 1.0, 0.0))
 
-                # 设置 UV
-                if uvs:
-                    local_uvs: List[Tuple[float, float]] = []
-                    uv_map: Dict[int, Tuple[float, float]] = {}
-                    for face in faces:
-                        for corner in range(3):
-                            v_idx = face[corner]
-                            vt_idx = face[corner + 3]
-                            key = (v_idx, vt_idx)
-                            if key in global_to_local:
-                                local_idx = global_to_local[key][0]
-                                if local_idx not in uv_map:
-                                    if vt_idx < len(uvs):
-                                        uv_map[local_idx] = uvs[vt_idx]
-                                    else:
-                                        uv_map[local_idx] = (0.0, 0.0)
-                    local_uvs = [uv_map.get(i, (0.0, 0.0)) for i in range(len(local_vertices))]
-                    tex_coords = UsdGeom.PrimvarsAPI(mesh_prim).CreatePrimvar(
-                        "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex,
-                    )
-                    tex_coords.Set(local_uvs)
+                        if 0 <= uvi < len(mesh.uvs) and uvi not in local_to_global_uv:
+                            local_to_global_uv[uvi] = len(all_uvs)
+                            all_uvs.append(mesh.uvs[uvi])
 
-                # 设置面数
-                mesh_prim.CreateFaceVertexCountsAttr([3] * len(local_faces))
-                mesh_prim.CreateFaceVertexIndicesAttr(
-                    [idx for face in local_faces for idx in face]
+                # 输出面索引（使用全局偏移）
+                for face in valid_faces:
+                    fvi = tuple(local_to_global_v[face[corner]] for corner in range(3))
+                    fni = tuple(local_to_global_n.get(face[corner + 6], 0) for corner in range(3))
+                    fui = tuple(local_to_global_uv.get(face[corner + 3], 0) for corner in range(3))
+                    all_face_vertex_indices.append(fvi)
+                    all_faces_normal_indices.append(fni)
+                    all_faces_uv_indices.append(fui)
+
+                v_offset = len(all_vertices)
+                n_offset = len(all_normals)
+                uv_offset = len(all_uvs)
+
+            if not all_face_vertex_indices:
+                continue
+
+            # 设置顶点
+            mesh_prim.CreatePointsAttr([Gf.Vec3f(*v) for v in all_vertices])
+
+            # 设置法线
+            if use_custom_normals and all_normals:
+                face_varying_normals: List[Gf.Vec3f] = []
+                for fni in all_faces_normal_indices:
+                    for ni in fni:
+                        if 0 <= ni < len(all_normals):
+                            face_varying_normals.append(Gf.Vec3f(*all_normals[ni]))
+                        else:
+                            face_varying_normals.append(Gf.Vec3f(0.0, 1.0, 0.0))
+                mesh_prim.CreateNormalsAttr(face_varying_normals)
+                mesh_prim.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+
+            # 设置 UV
+            if all_uvs:
+                tex_coords = UsdGeom.PrimvarsAPI(mesh_prim).CreatePrimvar(
+                    "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex,
                 )
+                tex_coords.Set([(uv[0], uv[1]) for uv in all_uvs])
 
-                # 创建材质
-                if mat_name and mat_name in self._materials:
-                    mat_path = root_path.AppendChild(f"Mat_{mesh_name}")
-                    material = UsdShade.Material.Define(stage, mat_path)
+            # 设置面
+            mesh_prim.CreateFaceVertexCountsAttr([3] * len(all_face_vertex_indices))
+            mesh_prim.CreateFaceVertexIndicesAttr(
+                [idx for fvi in all_face_vertex_indices for idx in fvi]
+            )
 
-                    mat_data = self._materials[mat_name]
-                    shader_path = mat_path.AppendChild("PreviewSurface")
-                    shader = UsdShade.Shader.Define(stage, shader_path)
-                    shader.CreateIdAttr("UsdPreviewSurface")
-
-                    diffuse = Gf.Vec3f(*mat_data.color)
-                    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(diffuse)
-                    shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(mat_data.metallic)
-                    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(mat_data.roughness)
-
-                    shader_output = shader.CreateOutput("surface", Sdf.ValueTypeNames.Token)
-                    material.CreateSurfaceOutput().ConnectToSource(shader_output)
-                    UsdShade.MaterialBindingAPI(mesh_prim).Bind(material)
-
-                mesh_index += 1
+            # 创建材质
+            if mat_name and mat_name in self._materials:
+                mat_path = root_path.AppendChild(f"Mat_{clean_name}")
+                material = UsdShade.Material.Define(stage, mat_path)
+                mat_data = self._materials[mat_name]
+                shader_path = mat_path.AppendChild("PreviewSurface")
+                shader = UsdShade.Shader.Define(stage, shader_path)
+                shader.CreateIdAttr("UsdPreviewSurface")
+                shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*mat_data.color))
+                shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(mat_data.metallic)
+                shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(mat_data.roughness)
+                shader_output = shader.CreateOutput("surface", Sdf.ValueTypeNames.Token)
+                material.CreateSurfaceOutput().ConnectToSource(shader_output)
+                UsdShade.MaterialBindingAPI(mesh_prim).Bind(material)
 
         stage.GetRootLayer().Save()
         print(f"[Merger] USD文件已保存: {output_file}")
