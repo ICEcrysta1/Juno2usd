@@ -82,13 +82,8 @@ class MeshMerger:
             all_vertices: List[Tuple[float, float, float]] = []
             all_normals: List[Tuple[float, float, float]] = []
             all_uvs: List[Tuple[float, float]] = []
-            all_faces_normal_indices: List[Tuple[int, int, int]] = []  # 每面 3 个法线索引（全局偏移后）
-            all_faces_uv_indices: List[Tuple[int, int, int]] = []  # 每面 3 个 UV 索引（全局偏移后）
+            all_faces_normal_indices: List[Tuple[int, int, int]] = []
             all_face_vertex_indices: List[Tuple[int, int, int]] = []
-
-            v_offset = 0
-            n_offset = 0
-            uv_offset = 0
 
             for mesh in group_meshes:
                 # 过滤退化面
@@ -101,20 +96,25 @@ class MeshMerger:
                 if not valid_faces:
                     continue
 
-                # 收集该 mesh 实际使用的顶点/法线/UV，并建立本地→全局映射
-                local_to_global_v: Dict[int, int] = {}
+                # 以 (v_idx, uv_idx) 为键展开顶点，确保位置和 UV 数组 1:1 对齐
+                # 法线使用 faceVarying 插值，独立存储
+                local_to_global_v: Dict[Tuple[int, int], int] = {}
                 local_to_global_n: Dict[int, int] = {}
-                local_to_global_uv: Dict[int, int] = {}
 
                 for face in valid_faces:
                     for corner in range(3):
                         vi = face[corner]
                         ni = face[corner + 6]
                         uvi = face[corner + 3]
+                        key = (vi, uvi)
 
-                        if vi not in local_to_global_v:
-                            local_to_global_v[vi] = len(all_vertices)
+                        if key not in local_to_global_v:
+                            local_to_global_v[key] = len(all_vertices)
                             all_vertices.append(mesh.vertices[vi])
+                            if 0 <= uvi < len(mesh.uvs):
+                                all_uvs.append(mesh.uvs[uvi])
+                            else:
+                                all_uvs.append((0.0, 0.0))
 
                         if 0 <= ni < len(mesh.normals) and ni not in local_to_global_n:
                             local_to_global_n[ni] = len(all_normals)
@@ -123,22 +123,18 @@ class MeshMerger:
                             else:
                                 all_normals.append((0.0, 1.0, 0.0))
 
-                        if 0 <= uvi < len(mesh.uvs) and uvi not in local_to_global_uv:
-                            local_to_global_uv[uvi] = len(all_uvs)
-                            all_uvs.append(mesh.uvs[uvi])
-
-                # 输出面索引（使用全局偏移）
+                # 输出面索引
                 for face in valid_faces:
-                    fvi = tuple(local_to_global_v[face[corner]] for corner in range(3))
-                    fni = tuple(local_to_global_n.get(face[corner + 6], 0) for corner in range(3))
-                    fui = tuple(local_to_global_uv.get(face[corner + 3], 0) for corner in range(3))
+                    fvi = tuple(
+                        local_to_global_v[(face[corner], face[corner + 3])]
+                        for corner in range(3)
+                    )
+                    fni = tuple(
+                        local_to_global_n.get(face[corner + 6], 0)
+                        for corner in range(3)
+                    )
                     all_face_vertex_indices.append(fvi)
                     all_faces_normal_indices.append(fni)
-                    all_faces_uv_indices.append(fui)
-
-                v_offset = len(all_vertices)
-                n_offset = len(all_normals)
-                uv_offset = len(all_uvs)
 
             if not all_face_vertex_indices:
                 continue
@@ -172,10 +168,11 @@ class MeshMerger:
             )
 
             # 创建材质
-            if mat_name and mat_name in self._materials:
+            lookup_key = clean_material_name(mat_name) if mat_name else "default"
+            if lookup_key in self._materials:
                 mat_path = root_path.AppendChild(f"Mat_{clean_name}")
                 material = UsdShade.Material.Define(stage, mat_path)
-                mat_data = self._materials[mat_name]
+                mat_data = self._materials[lookup_key]
                 shader_path = mat_path.AppendChild("PreviewSurface")
                 shader = UsdShade.Shader.Define(stage, shader_path)
                 shader.CreateIdAttr("UsdPreviewSurface")
