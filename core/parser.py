@@ -47,6 +47,8 @@ def _parse_fuselage_xml(fuselage_elem: ET.Element) -> FuselageParams:
             float(x) for x in fuselage_elem.attrib["clampDistances"].split(",")
         )
 
+    params.flatten_normals = fuselage_elem.attrib.get("flattenNormals", "")
+
     return params
 
 

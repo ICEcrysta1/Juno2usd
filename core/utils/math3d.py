@@ -236,3 +236,25 @@ def apply_clamp(
         new_coords.append((new_x, y, new_z))
 
     return new_coords
+
+
+def calc_face_normal(
+    vertices: List[Tuple[float, float, float]], v1: int, v2: int, v3: int
+) -> Tuple[float, float, float]:
+    """计算单个面的单位法线向量（纯数学工具）。"""
+    nv = len(vertices)
+    if v1 >= nv or v2 >= nv or v3 >= nv:
+        return (0.0, 1.0, 0.0)
+
+    p1, p2, p3 = vertices[v1], vertices[v2], vertices[v3]
+    e1 = (p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2])
+    e2 = (p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2])
+
+    nx = e1[1] * e2[2] - e1[2] * e2[1]
+    ny = e1[2] * e2[0] - e1[0] * e2[2]
+    nz = e1[0] * e2[1] - e1[1] * e2[0]
+
+    length = math.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
+    if length > EPSILON:
+        return (nx / length, ny / length, nz / length)
+    return (0.0, 1.0, 0.0)
