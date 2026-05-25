@@ -21,6 +21,23 @@ from ..utils.constants import (
 )
 
 
+def _lookup_normal(
+    nmap: Dict,
+    v: int,
+    fi: int,
+    smooth_groups: dict,
+) -> int:
+    """从法线映射中查找顶点法线索引。
+
+    当 smooth_groups 可用时，以 (v, group_id) 双键查找（支持硬边多法线）。
+    否则以 v 单键查找（fallback 模式）。
+    """
+    if smooth_groups:
+        gid = smooth_groups.get(fi, 0)
+        return nmap.get((v, gid), -1)
+    return nmap.get(v, -1)
+
+
 class NormalService:
     """统一法线计算服务。"""
 
@@ -212,19 +229,19 @@ class NormalService:
                     vn2 = inner_cap_top_nm.get(v2, inner_cap_map.get(v2, -1))
                     vn3 = inner_cap_top_nm.get(v3, inner_cap_map.get(v3, -1))
                 elif fi in outer_side:
-                    vn1 = side_map.get(v1, -1)
-                    vn2 = side_map.get(v2, -1)
-                    vn3 = side_map.get(v3, -1)
+                    vn1 = _lookup_normal(side_map, v1, fi, smooth_groups)
+                    vn2 = _lookup_normal(side_map, v2, fi, smooth_groups)
+                    vn3 = _lookup_normal(side_map, v3, fi, smooth_groups)
                 elif fi in inner_side:
-                    vn1 = inner_side_map.get(v1, -1)
-                    vn2 = inner_side_map.get(v2, -1)
-                    vn3 = inner_side_map.get(v3, -1)
+                    vn1 = _lookup_normal(inner_side_map, v1, fi, smooth_groups)
+                    vn2 = _lookup_normal(inner_side_map, v2, fi, smooth_groups)
+                    vn3 = _lookup_normal(inner_side_map, v3, fi, smooth_groups)
                 else:
                     vn1 = vn2 = vn3 = -1
             else:
-                vn1 = side_map.get(v1, -1)
-                vn2 = side_map.get(v2, -1)
-                vn3 = side_map.get(v3, -1)
+                vn1 = _lookup_normal(side_map, v1, fi, smooth_groups)
+                vn2 = _lookup_normal(side_map, v2, fi, smooth_groups)
+                vn3 = _lookup_normal(side_map, v3, fi, smooth_groups)
 
             if vn1 < 0:
                 vn1 = vn2 = vn3 = self._add_face_normal(vertices, v1, v2, v3, normals)
@@ -336,21 +353,21 @@ class NormalService:
             v1, v2, v3, vt1, vt2, vt3, mat, pid = face
 
             if fi in cap_bot_set:
-                vn1 = cap_nm.get(v1, -1)
-                vn2 = cap_nm.get(v2, -1)
-                vn3 = cap_nm.get(v3, -1)
+                vn1 = _lookup_normal(cap_nm, v1, fi, smooth_groups)
+                vn2 = _lookup_normal(cap_nm, v2, fi, smooth_groups)
+                vn3 = _lookup_normal(cap_nm, v3, fi, smooth_groups)
             elif fi in side_set:
-                vn1 = side_nm.get(v1, -1)
-                vn2 = side_nm.get(v2, -1)
-                vn3 = side_nm.get(v3, -1)
+                vn1 = _lookup_normal(side_nm, v1, fi, smooth_groups)
+                vn2 = _lookup_normal(side_nm, v2, fi, smooth_groups)
+                vn3 = _lookup_normal(side_nm, v3, fi, smooth_groups)
             elif fi in inner_cap_bot_set:
-                vn1 = inner_cap_nm.get(v1, -1)
-                vn2 = inner_cap_nm.get(v2, -1)
-                vn3 = inner_cap_nm.get(v3, -1)
+                vn1 = _lookup_normal(inner_cap_nm, v1, fi, smooth_groups)
+                vn2 = _lookup_normal(inner_cap_nm, v2, fi, smooth_groups)
+                vn3 = _lookup_normal(inner_cap_nm, v3, fi, smooth_groups)
             elif fi in inner_side_set:
-                vn1 = inner_side_nm.get(v1, -1)
-                vn2 = inner_side_nm.get(v2, -1)
-                vn3 = inner_side_nm.get(v3, -1)
+                vn1 = _lookup_normal(inner_side_nm, v1, fi, smooth_groups)
+                vn2 = _lookup_normal(inner_side_nm, v2, fi, smooth_groups)
+                vn3 = _lookup_normal(inner_side_nm, v3, fi, smooth_groups)
             else:
                 vn1 = vn2 = vn3 = -1
 
@@ -593,15 +610,15 @@ class NormalService:
                 vg_acc[key][1] += fn[1]
                 vg_acc[key][2] += fn[2]
 
-        # 归一化
-        result: Dict[int, int] = {}
+        # 归一化：以 (v, gid) 为键保留硬边多法线
+        result: Dict[Tuple[int, int], int] = {}
         for (v, gid), acc in vg_acc.items():
             length = math.sqrt(acc[0]**2 + acc[1]**2 + acc[2]**2)
             if length > EPSILON:
                 fn = (acc[0]/length, acc[1]/length, acc[2]/length)
             else:
                 fn = (0.0, 1.0, 0.0)
-            result[v] = len(normals)
+            result[(v, gid)] = len(normals)
             normals.append(fn)
 
         return result
