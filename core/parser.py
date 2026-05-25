@@ -229,6 +229,10 @@ class SR2XMLParser:
         params.radius_z = self.default_radius_z
         params.length = params.offset_y * 2
 
+        if params.length < 0.001:
+            print(f"[Parser] 警告: {part_data.part_id} offset_y≈0，长度设为默认 1.0")
+            params.length = 1.0
+
         config = fuselage.find("../Config")
         if config is not None and "partScale" in config.attrib:
             params.part_scale = tuple(
