@@ -198,8 +198,8 @@ class NormalService:
                     vn3 = inner_cap_bot_nm.get(v3, inner_cap_map.get(v3, -1))
                 elif fi in inner_cap_top:
                     vn1 = inner_cap_top_nm.get(v1, inner_cap_map.get(v1, -1))
-                    vn2 = inner_cap_map.get(v2, -1)
-                    vn3 = inner_cap_map.get(v3, -1)
+                    vn2 = inner_cap_top_nm.get(v2, inner_cap_map.get(v2, -1))
+                    vn3 = inner_cap_top_nm.get(v3, inner_cap_map.get(v3, -1))
                 elif fi in outer_side:
                     vn1 = side_map.get(v1, -1)
                     vn2 = side_map.get(v2, -1)
