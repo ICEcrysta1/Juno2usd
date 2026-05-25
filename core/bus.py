@@ -131,16 +131,20 @@ class Bus:
         mesh.uvs = geom.uvs
         mesh.normals = normals
 
-        # NormalService.compute() 已将面格式从 8 值转为 11 值
-        # (v1,v2,v3,vt1,vt2,vt3,vn1,vn2,vn3,mat,pid)
+        # NormalService.compute() 将面格式从 8 值转为 11 值
+        # 8 值: (v1,v2,v3, vt1,vt2,vt3, mat, pid)
+        # 11 值: (v1,v2,v3, vt1,vt2,vt3, vn1,vn2,vn3, mat, pid)
         for face in geom.faces:
-            if len(face) == 11:
+            n = len(face)
+            if n == 11:
                 mesh.faces.append(face)
-            elif len(face) == 8:
+            elif n == 8:
                 v1, v2, v3, vt1, vt2, vt3, mat, pid = face
                 mesh.faces.append((v1, v2, v3, vt1, vt2, vt3, 0, 0, 0, mat, pid))
             else:
-                # 降级：取前 11 个
-                mesh.faces.append(tuple(face[:11]))
+                raise ValueError(
+                    f"零件 {geom.part_id} 的面元组长度不正确: 期望 8 或 11，实际 {n}。"
+                    f"面数据: {face}"
+                )
 
         return mesh

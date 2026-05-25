@@ -141,32 +141,32 @@ class PartData:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PartData":
         part = cls(
-            part_id=data["part_id"],
-            part_type=data["part_type"],
-            position=tuple(data["position"]),
-            rotation=tuple(data["rotation"]),
-            material_name=data["material_name"],
-            material_index=data["material_index"],
+            part_id=data.get("part_id", "unknown"),
+            part_type=data.get("part_type", "unknown"),
+            position=tuple(data.get("position", (0.0, 0.0, 0.0))),
+            rotation=tuple(data.get("rotation", (0.0, 0.0, 0.0))),
+            material_name=data.get("material_name", "default"),
+            material_index=data.get("material_index", 0),
             wall_thickness=data.get("wall_thickness", 0.0),
             subdivisions=data.get("subdivisions", 5),
         )
         if data.get("fuselage_params"):
             fp = data["fuselage_params"]
             part.fuselage_params = FuselageParams(
-                length=fp["length"],
-                radius_x=fp["radius_x"],
-                radius_z=fp["radius_z"],
-                offset_x=fp["offset_x"],
-                offset_y=fp["offset_y"],
-                offset_z=fp["offset_z"],
-                top_scale_x=fp["top_scale_x"],
-                top_scale_z=fp["top_scale_z"],
-                bottom_scale_x=fp["bottom_scale_x"],
-                bottom_scale_z=fp["bottom_scale_z"],
-                deformations=tuple(fp["deformations"]),
-                corner_radiuses=tuple(fp["corner_radiuses"]),
-                clamp_distances=tuple(fp["clamp_distances"]),
-                part_scale=tuple(fp["part_scale"]),
+                length=fp.get("length", 5.0),
+                radius_x=fp.get("radius_x", 1.0),
+                radius_z=fp.get("radius_z", 1.0),
+                offset_x=fp.get("offset_x", 0.0),
+                offset_y=fp.get("offset_y", 0.0),
+                offset_z=fp.get("offset_z", 0.0),
+                top_scale_x=fp.get("top_scale_x", 1.0),
+                top_scale_z=fp.get("top_scale_z", 1.0),
+                bottom_scale_x=fp.get("bottom_scale_x", 1.0),
+                bottom_scale_z=fp.get("bottom_scale_z", 1.0),
+                deformations=tuple(fp.get("deformations", (0.0, 0.0, 0.0))),
+                corner_radiuses=tuple(fp.get("corner_radiuses", (1.0,) * 8)),
+                clamp_distances=tuple(fp.get("clamp_distances", (1.0,) * 8)),
+                part_scale=tuple(fp.get("part_scale", (1.0, 1.0, 1.0))),
             )
         return part
 
@@ -211,8 +211,10 @@ class RawGeometry:
     material_name: str
     vertices: List[Tuple[float, float, float]] = field(default_factory=list)
     uvs: List[Tuple[float, float]] = field(default_factory=list)
-    # 面数据 (v1,v2,v3, vt1,vt2,vt3, material_name, part_id)
-    faces: List[Tuple[int, int, int, int, int, int, str, str]] = field(default_factory=list)
+    # 面数据 — 生成阶段为 8 值，NormalService 处理后变为 11 值
+    # 8 值: (v1,v2,v3, vt1,vt2,vt3, material_name, part_id)
+    # 11 值: (v1,v2,v3, vt1,vt2,vt3, vn1,vn2,vn3, material_name, part_id)
+    faces: List[Tuple] = field(default_factory=list)
     # 环形顶点信息，供法线服务使用
     ring_info: Dict[str, Any] = field(default_factory=dict)
     # 为骨骼预留

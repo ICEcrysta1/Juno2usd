@@ -19,8 +19,13 @@ def parse_vector(text: str) -> Tuple[float, float, float]:
 
     Returns:
         三元组 (x, y, z)。
+
+    Raises:
+        ValueError: 输入格式不正确（不是恰好 3 个值）。
     """
     parts = text.split(",")
+    if len(parts) != 3:
+        raise ValueError(f"向量需要恰好 3 个逗号分隔的值，实际得到 {len(parts)}: {text!r}")
     return (float(parts[0]), float(parts[1]), float(parts[2]))
 
 
@@ -32,8 +37,13 @@ def parse_scale(text: str) -> Tuple[float, float]:
 
     Returns:
         二元组 (x, z)。
+
+    Raises:
+        ValueError: 输入格式不正确（不是恰好 2 个值）。
     """
     parts = text.split(",")
+    if len(parts) != 2:
+        raise ValueError(f"scale 需要恰好 2 个逗号分隔的值，实际得到 {len(parts)}: {text!r}")
     return (float(parts[0]), float(parts[1]))
 
 

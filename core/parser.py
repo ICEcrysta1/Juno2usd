@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from typing import Any, Dict, List, Optional, Tuple
 
 from .models import FuselageParams, Material, PartData
@@ -231,7 +231,9 @@ class SR2XMLParser:
 
         config = fuselage.find("../Config")
         if config is not None and "partScale" in config.attrib:
-            params.part_scale = tuple(float(x) for x in config.attrib["partScale"].split(","))
+            params.part_scale = tuple(
+                float(x) for x in config.attrib.get("partScale", "1,1,1").split(",")
+            )
 
         return params
 
