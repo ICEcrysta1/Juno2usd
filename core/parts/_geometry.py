@@ -461,8 +461,16 @@ def generate_cone_geometry(
             geom.uvs.append((0.5, t))
             for _ in range(segments):
                 ring_verts.append((vi, vti))
-                if is_hollow and inner_ring_verts is not None:
-                    inner_ring_verts.append((vi, vti))
+
+            if is_hollow and inner_ring_verts is not None:
+                # 内层尖端：沿 Y 轴向基座方向偏移壁厚，独立顶点
+                inner_y = y_final - wall_thickness * scale_y if t > 0.5 else y_final + wall_thickness * scale_y
+                vi_inner = len(geom.vertices)
+                geom.vertices.append((x, inner_y, z))
+                vti_inner = len(geom.uvs)
+                geom.uvs.append((0.5, t))
+                for _ in range(segments):
+                    inner_ring_verts.append((vi_inner, vti_inner))
         else:
             if is_hollow:
                 inner_coords: List[Tuple[float, float, float]] = []
