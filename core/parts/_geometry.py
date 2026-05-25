@@ -595,6 +595,8 @@ def generate_cone_geometry(
 
     # 分类面（侧面 vs 端盖）并计算平滑组
     bottom_ring_set = set(ring_indices[0][i][0] for i in range(len(ring_indices[0])))
+    if is_hollow and inner_ring_indices:
+        bottom_ring_set.update(i[0] for i in inner_ring_indices[0])
     all_ring_verts = set()
     for ring in ring_indices:
         all_ring_verts.update(i[0] for i in ring)
