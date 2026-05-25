@@ -1,7 +1,26 @@
-*.obj
-*.fbx
+*.usda
+*.usdc
 *.png
+*.md
+*.spec
+!README.md
 
+build/*
 Output/*
 Input/*
+core/__pycache__/*
 !Input/Test-Juno2OBJ.xml
+cache/*
+.sr2_cache
+
+# Dependencies
+deps/   
+*.whl
+
+# Project private docs
+
+.claude/
+.vscode/
+core_old
+*.pyc
+__pycache__/
