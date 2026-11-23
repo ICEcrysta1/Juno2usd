@@ -10,7 +10,6 @@ pub struct Settings {
     pub mesh: Mesh,
     pub fuselage: Fuselage,
     pub hollow: Hollow,
-    #[allow(dead_code, reason = "normal 模块落地后消费锐边阈值")]
     pub normals: Normals,
 }
 
@@ -39,7 +38,6 @@ pub struct Hollow {
 #[derive(Debug, Deserialize)]
 pub struct Normals {
     /// 锐边判定阈值（度）
-    #[allow(dead_code, reason = "normal 模块落地后消费锐边阈值")]
     pub sharp_edge_angle: f64,
 }
 

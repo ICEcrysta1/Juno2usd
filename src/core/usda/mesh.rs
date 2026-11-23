@@ -6,13 +6,17 @@
 use openusd::gf::{Vec2f, Vec3f};
 use openusd::usd::Stage;
 use openusd::vt::Value;
-use openusd_schemas::geom::{Interpolation, Mesh, MeshSchema, PointBasedSchema, PrimvarsAPI};
+use openusd_schemas::geom::{
+    Interpolation, Mesh, MeshSchema, PointBasedExt, PointBasedSchema, PrimvarsAPI,
+};
 
 /// 紧凑化后的网格数据（USD 精度为 f32）
 pub struct CompactMesh {
     pub points: Vec<[f32; 3]>,
     pub uvs: Vec<[f32; 2]>,
     pub faces: Vec<[i32; 3]>,
+    /// faceVarying 法线，每面三个；空则不写法线
+    pub normals: Vec<[f32; 3]>,
 }
 
 pub fn write(stage: &Stage, path: &str, data: &CompactMesh) -> Result<(), String> {
@@ -38,6 +42,18 @@ pub fn write(stage: &Stage, path: &str, data: &CompactMesh) -> Result<(), String
         .map_err(|e| e.to_string())?
         .set(Value::token("none"))
         .map_err(|e| e.to_string())?;
+
+    // 法线：faceVarying 插值
+    if !data.normals.is_empty() {
+        mesh.create_normals_attr()
+            .map_err(|e| e.to_string())?
+            .set(Value::Vec3fVec(
+                data.normals.iter().map(|&n| Vec3f::from(n)).collect(),
+            ))
+            .map_err(|e| e.to_string())?;
+        mesh.set_normals_interpolation(Interpolation::FaceVarying)
+            .map_err(|e| e.to_string())?;
+    }
 
     // UV：st primvar，vertex 插值（UV 与顶点一一对应）
     let primvars = PrimvarsAPI::from_prim_unchecked(stage.prim(path).map_err(|e| e.to_string())?);

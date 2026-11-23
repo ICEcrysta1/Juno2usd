@@ -1,6 +1,6 @@
 //! 零件解析：partType 分发、Fuselage 参数、Config/partScale。
 
-use super::model::{FuselageParams, ParsedModel, Part, PartType};
+use super::model::{FlattenNormals, FuselageParams, ParsedModel, Part, PartType};
 use super::{connection, material};
 use crate::core::shapes::algo::transform::Vec3;
 use crate::settings::Settings;
@@ -100,6 +100,7 @@ fn parse_fuselage_params(
         corner_radiuses: [1.0; 8],
         clamp_distances: [1.0; 8],
         part_scale: [1.0; 3],
+        flatten_normals: FlattenNormals::None,
     };
 
     if let Some(offset) = fus.attribute("offset").and_then(parse_vec3) {
@@ -130,6 +131,10 @@ fn parse_fuselage_params(
     }
 
     p.length = p.offset[1] * 2.0;
+
+    if let Some(f) = fus.attribute("flattenNormals") {
+        p.flatten_normals = FlattenNormals::from_xml(f);
+    }
 
     if let Some(config) = elem.children().find(|n| n.has_tag_name("Config"))
         && let Some(s) = config.attribute("partScale").and_then(parse_vec3)

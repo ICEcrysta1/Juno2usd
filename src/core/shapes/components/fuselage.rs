@@ -6,7 +6,7 @@
 use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, stitch_side};
 use super::super::algo::section::{apply_clamp, rounded_rect_point, shear_y, shrink_radial};
 use super::super::algo::transform::{Vec3, scale_ring};
-use super::model::{RawMesh, Rings};
+use super::model::{FaceGroup, RawMesh};
 use crate::core::parse::Part;
 use std::f64::consts::PI;
 
@@ -130,63 +130,69 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     });
 
-    // 侧面与端盖
+    // 侧面与端盖（按组打标）
+    let mut f = Vec::new();
     stitch_side(
-        &mut mesh.faces,
+        &mut f,
         &bottom_idx,
         &top_idx,
         bottom_is_point,
         top_is_point,
         false,
     );
+    mesh.add_faces(f, FaceGroup::OuterSide);
+
     if let (Some(bi), Some(ti)) = (bottom_inner_idx, top_inner_idx) {
-        stitch_side(
-            &mut mesh.faces,
-            &bi,
-            &ti,
-            bottom_is_point,
-            top_is_point,
-            true,
-        );
+        let mut f = Vec::new();
+        stitch_side(&mut f, &bi, &ti, bottom_is_point, top_is_point, true);
+        mesh.add_faces(f, FaceGroup::InnerSide);
         if !bottom_is_point {
-            cap_annulus(&mut mesh.faces, &bottom_idx, &bi, false);
+            let mut f = Vec::new();
+            cap_annulus(&mut f, &bottom_idx, &bi, false);
+            let g = if p.flatten_normals.bottom_flat() {
+                FaceGroup::CapBottom
+            } else {
+                FaceGroup::OuterSide
+            };
+            mesh.add_faces(f, g);
         }
         if !top_is_point {
-            cap_annulus(&mut mesh.faces, &top_idx, &ti, true);
+            let mut f = Vec::new();
+            cap_annulus(&mut f, &top_idx, &ti, true);
+            let g = if p.flatten_normals.top_flat() {
+                FaceGroup::CapTop
+            } else {
+                FaceGroup::OuterSide
+            };
+            mesh.add_faces(f, g);
         }
-        mesh.rings = Rings::Cylinder {
-            bottom: bottom_idx,
-            top: top_idx,
-            bottom_inner: Some(bi),
-            top_inner: Some(ti),
-            bottom_corners: bottom_corners.try_into().unwrap(),
-            top_corners: top_corners.try_into().unwrap(),
-            bottom_is_point,
-            top_is_point,
-        };
     } else {
         let [sx, sy, sz] = p.part_scale;
         if !bottom_is_point {
             let center = [-p.offset[0] * sx, -half_len * sy, -p.offset[2] * sz];
             let c = mesh.push_vertex(center, [0.5, 0.5]);
-            cap_fan(&mut mesh.faces, c, &bottom_idx, false);
+            let mut f = Vec::new();
+            cap_fan(&mut f, c, &bottom_idx, false);
+            let g = if p.flatten_normals.bottom_flat() {
+                FaceGroup::CapBottom
+            } else {
+                FaceGroup::OuterSide
+            };
+            mesh.add_faces(f, g);
         }
         if !top_is_point {
             let cd = 2.0 * p.offset[1] * shear * sy;
             let center = [p.offset[0] * sx, half_len * sy - cd / 2.0, p.offset[2] * sz];
             let c = mesh.push_vertex(center, [0.5, 0.5]);
-            cap_fan(&mut mesh.faces, c, &top_idx, true);
+            let mut f = Vec::new();
+            cap_fan(&mut f, c, &top_idx, true);
+            let g = if p.flatten_normals.top_flat() {
+                FaceGroup::CapTop
+            } else {
+                FaceGroup::OuterSide
+            };
+            mesh.add_faces(f, g);
         }
-        mesh.rings = Rings::Cylinder {
-            bottom: bottom_idx,
-            top: top_idx,
-            bottom_inner: None,
-            top_inner: None,
-            bottom_corners: bottom_corners.try_into().unwrap(),
-            top_corners: top_corners.try_into().unwrap(),
-            bottom_is_point,
-            top_is_point,
-        };
     }
 
     Some(mesh)

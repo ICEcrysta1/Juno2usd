@@ -1,27 +1,22 @@
-//! 几何数据定义：环拓扑与零件网格。
+//! 几何数据定义：面分组与零件网格。
 
 use super::super::algo::transform;
 use crate::core::parse::Part;
 
-/// 环拓扑：供法线模块做面分类，替代旧代码的无类型 ring_info 字典
-#[allow(dead_code, reason = "normal 模块落地后消费环拓扑做面分类")]
-#[derive(Debug, Clone)]
-pub enum Rings {
-    Cylinder {
-        bottom: Vec<usize>,
-        top: Vec<usize>,
-        bottom_inner: Option<Vec<usize>>,
-        top_inner: Option<Vec<usize>>,
-        bottom_corners: [f64; 4],
-        top_corners: [f64; 4],
-        bottom_is_point: bool,
-        top_is_point: bool,
-    },
-    NoseCone {
-        rings: Vec<Vec<usize>>,
-        inner_rings: Option<Vec<Vec<usize>>>,
-        has_bottom_cap: bool,
-    },
+/// 面分组：几何生成时打标，供法线模块消费，无需事后分类
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FaceGroup {
+    OuterSide,
+    InnerSide,
+    CapBottom,
+    CapTop,
+}
+
+impl FaceGroup {
+    /// 侧面组走平滑组算法；端盖组取平面法线
+    pub fn is_side(self) -> bool {
+        matches!(self, Self::OuterSide | Self::InnerSide)
+    }
 }
 
 /// 单个零件的网格（局部空间）。UV 与顶点一一对应，面只索引顶点。
@@ -32,7 +27,10 @@ pub struct RawMesh {
     pub vertices: Vec<transform::Vec3>,
     pub uvs: Vec<[f64; 2]>,
     pub faces: Vec<[usize; 3]>,
-    pub rings: Rings,
+    /// 与 faces 一一对应
+    pub face_groups: Vec<FaceGroup>,
+    /// 几何声明的锐边（无序顶点对），如鼻锥尖端顶点的所有边
+    pub sharp_edges: std::collections::HashSet<(usize, usize)>,
 }
 
 impl RawMesh {
@@ -43,16 +41,8 @@ impl RawMesh {
             vertices: Vec::new(),
             uvs: Vec::new(),
             faces: Vec::new(),
-            rings: Rings::Cylinder {
-                bottom: Vec::new(),
-                top: Vec::new(),
-                bottom_inner: None,
-                top_inner: None,
-                bottom_corners: [1.0; 4],
-                top_corners: [1.0; 4],
-                bottom_is_point: false,
-                top_is_point: false,
-            },
+            face_groups: Vec::new(),
+            sharp_edges: std::collections::HashSet::new(),
         }
     }
 
@@ -61,6 +51,13 @@ impl RawMesh {
         self.vertices.push(v);
         self.uvs.push(uv);
         idx
+    }
+
+    /// 追加一批面并打上分组标签
+    pub fn add_faces(&mut self, faces: Vec<[usize; 3]>, group: FaceGroup) {
+        self.face_groups
+            .resize(self.faces.len() + faces.len(), group);
+        self.faces.extend(faces);
     }
 
     /// 局部 → 世界：R·v + position

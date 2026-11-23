@@ -56,8 +56,14 @@ fn main() {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Model".to_string());
-        core::usda::export(Path::new(usda_path), &prefix, &model.materials, &meshes)
-            .expect("USD 导出失败");
+        core::usda::export(
+            Path::new(usda_path),
+            &prefix,
+            &model.materials,
+            &meshes,
+            settings.normals.sharp_edge_angle,
+        )
+        .expect("USD 导出失败");
         println!("USD 已导出: {usda_path}");
     }
 }

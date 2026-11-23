@@ -30,11 +30,39 @@ fn mat_mul(a: [[f64; 3]; 3], b: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
 
 /// 世界坐标 = R·局部坐标 + position
 pub fn to_world(rot: &[[f64; 3]; 3], pos: Vec3, p: Vec3) -> Vec3 {
+    let r = rotate_vec(rot, p);
+    [r[0] + pos[0], r[1] + pos[1], r[2] + pos[2]]
+}
+
+/// 纯旋转向量（法线变换用，无平移）
+pub fn rotate_vec(rot: &[[f64; 3]; 3], v: Vec3) -> Vec3 {
     [
-        rot[0][0] * p[0] + rot[0][1] * p[1] + rot[0][2] * p[2] + pos[0],
-        rot[1][0] * p[0] + rot[1][1] * p[1] + rot[1][2] * p[2] + pos[1],
-        rot[2][0] * p[0] + rot[2][1] * p[1] + rot[2][2] * p[2] + pos[2],
+        rot[0][0] * v[0] + rot[0][1] * v[1] + rot[0][2] * v[2],
+        rot[1][0] * v[0] + rot[1][1] * v[1] + rot[1][2] * v[2],
+        rot[2][0] * v[0] + rot[2][1] * v[1] + rot[2][2] * v[2],
     ]
+}
+
+pub fn dot(a: Vec3, b: Vec3) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+pub fn cross(a: Vec3, b: Vec3) -> Vec3 {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// 归一化；退化向量返回零向量
+pub fn normalize(v: Vec3) -> Vec3 {
+    let len = dot(v, v).sqrt();
+    if len > 1e-12 {
+        [v[0] / len, v[1] / len, v[2] / len]
+    } else {
+        [0.0; 3]
+    }
 }
 
 /// 环坐标缩放（partScale）
