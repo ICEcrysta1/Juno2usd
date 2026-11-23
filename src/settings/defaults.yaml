@@ -1,0 +1,15 @@
+# 权威运行参数：影响算法、数据语义与可复现行为的参数以此文件为准
+mesh:
+  segments: 24                # 截面周向分段数
+  nose_cone_subdivisions: 5   # 鼻锥轴向细分段数
+
+fuselage:
+  default_radius_x: 1.0       # 默认椭圆短边半径
+  default_radius_z: 1.0       # 默认椭圆长边半径
+  strut_corner_radius: 0.5    # Strut1 缺省圆角半径
+
+hollow:
+  wall_thickness: 0.045       # Inlet/Fairing 默认壁厚
+
+normals:
+  sharp_edge_angle: 40.0      # 锐边判定阈值（度）

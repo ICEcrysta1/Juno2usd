@@ -10,3 +10,6 @@ publish = false
 openusd = "0.9"
 # 类型化 schema：UsdGeom / UsdShade / UsdSkel，恰为本项目所需三族
 openusd-schemas = { version = "0.9", features = ["geom", "shade", "skel"] }
+roxmltree = "0.21.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde-saphyr = "2.2.0"
