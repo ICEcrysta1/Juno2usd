@@ -1,0 +1,10 @@
+[build]
+target-dir = "target"
+build-dir = "target/x86_64-pc-windows-gnullvm"
+
+[target.x86_64-pc-windows-gnullvm]
+linker = "x86_64-w64-mingw32-clang"
+
+[env]
+CC = "x86_64-w64-mingw32-clang"
+AR = "llvm-ar"

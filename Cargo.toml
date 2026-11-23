@@ -1,0 +1,12 @@
+[package]
+name = "juno2usd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+publish = false
+
+[dependencies]
+# USD 原生 Rust 实现（无 C++ 依赖）：usda/usdc/usdz 读写 + Stage API
+openusd = "0.9"
+# 类型化 schema：UsdGeom / UsdShade / UsdSkel，恰为本项目所需三族
+openusd-schemas = { version = "0.9", features = ["geom", "shade", "skel"] }
