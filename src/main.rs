@@ -1,6 +1,7 @@
 mod core;
 mod settings;
 
+use core::parse;
 use core::shapes::{self, RawMesh};
 use std::path::Path;
 
@@ -14,7 +15,7 @@ fn main() {
         .unwrap_or("Input/Test-Juno2OBJ.xml");
 
     let settings = settings::Settings::load().expect("加载 settings 失败");
-    let model = shapes::parse_file(Path::new(input), &settings).expect("解析 XML 失败");
+    let model = parse::parse_file(Path::new(input), &settings).expect("解析 XML 失败");
     println!(
         "材质 {} | 零件 {} | 连接 {}",
         model.materials.len(),
@@ -48,6 +49,16 @@ fn main() {
     if let Some(dump_path) = args.get(2) {
         dump_json(dump_path, &meshes);
         println!("已导出: {dump_path}");
+    }
+
+    if let Some(usda_path) = args.get(3) {
+        let prefix = Path::new(input)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "Model".to_string());
+        core::usda::export(Path::new(usda_path), &prefix, &model.materials, &meshes)
+            .expect("USD 导出失败");
+        println!("USD 已导出: {usda_path}");
     }
 }
 

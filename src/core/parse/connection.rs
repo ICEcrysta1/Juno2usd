@@ -9,7 +9,9 @@ pub struct Connection {
     pub part_a: String,
     /// 父零件 ID
     pub part_b: String,
+    #[allow(dead_code, reason = "连接点语义保留，骨骼模块落地后消费")]
     pub attach_a: String,
+    #[allow(dead_code, reason = "连接点语义保留，骨骼模块落地后消费")]
     pub attach_b: String,
 }
 

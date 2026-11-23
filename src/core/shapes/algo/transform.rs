@@ -1,4 +1,4 @@
-//! Part 公共数学：Unity 欧拉角旋转与局部→世界变换。
+//! 变换数学：Unity 欧拉角旋转与局部→世界变换。
 //!
 //! 约定：几何一律在局部空间生成，最后经此变换到世界空间。
 
@@ -35,4 +35,13 @@ pub fn to_world(rot: &[[f64; 3]; 3], pos: Vec3, p: Vec3) -> Vec3 {
         rot[1][0] * p[0] + rot[1][1] * p[1] + rot[1][2] * p[2] + pos[1],
         rot[2][0] * p[0] + rot[2][1] * p[1] + rot[2][2] * p[2] + pos[2],
     ]
+}
+
+/// 环坐标缩放（partScale）
+pub fn scale_ring(ring: &mut [Vec3], scale: Vec3) {
+    for c in ring.iter_mut() {
+        c[0] *= scale[0];
+        c[1] *= scale[1];
+        c[2] *= scale[2];
+    }
 }

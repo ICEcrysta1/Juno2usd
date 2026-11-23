@@ -1,11 +1,6 @@
-//! 共享截面几何（纯函数，无零件语义）。
-//!
-//! - 圆角矩形截面点：每角半径 r∈[0,1]，方↔圆插值
-//! - 水滴形变：x *= 1 - d·(1-(z+1)/2)
-//! - clamp 挤压：按 ±X/±Z 分侧乘比例
-//! - 竖向剪切：y += cut_depth·(z_norm-1)/2
+//! 截面算法：圆角矩形（圆↔方）、水滴形变、clamp 挤压、竖向剪切、空心收缩。
 
-use super::base::Vec3;
+use super::transform::Vec3;
 use std::f64::consts::PI;
 
 const TAU: f64 = 2.0 * PI;
