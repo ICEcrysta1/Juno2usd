@@ -1,13 +1,15 @@
 mod core;
 mod settings;
+mod tui;
 
 use std::path::Path;
 
-/// 薄入口：有参数走 CLI 转换；无参数不自动转换（TUI 落地后进入交互界面）。
+/// 薄入口：有参数走 CLI 转换；无参数进入 TUI（不自动转换）。
 fn main() {
+    tui::i18n::init_from_env();
     let args: Vec<String> = std::env::args().collect();
     let Some(input) = args.get(1) else {
-        println!("用法: juno2usd <input.xml> [dump.json] [output.usda]");
+        println!("{}", tui::i18n::i18n!(ui_usage));
         return;
     };
     let dump = args.get(2).map(Path::new);

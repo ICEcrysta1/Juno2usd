@@ -13,3 +13,5 @@ openusd-schemas = { version = "0.9", features = ["geom", "shade", "skel"] }
 roxmltree = "0.21.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.2.0"
+# TUI 框架（crossterm 经 ratatui 重导出，不单独引依赖）
+ratatui = "0.29"
