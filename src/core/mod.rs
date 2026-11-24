@@ -2,8 +2,11 @@
 //!
 //! 对外编排入口与进度类型后续在此定义；核心同步、无 UI 依赖。
 
+pub mod convert;
 pub mod normal;
 pub mod parse;
 pub mod shapes;
 pub mod skel;
 pub mod usda;
+
+pub use convert::convert;
