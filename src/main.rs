@@ -7,6 +7,13 @@ use std::path::Path;
 /// 薄入口：有参数走 CLI 转换；无参数进入 TUI（不自动转换）。
 fn main() {
     tui::i18n::init_from_env();
+    // 启动时确保 Input/Output 目录存在；create_dir_all 对已存在目录直接跳过
+    for dir in ["Input", "Output"] {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("创建 {dir} 目录失败: {e}");
+            std::process::exit(1);
+        }
+    }
     let args: Vec<String> = std::env::args().collect();
     let Some(input) = args.get(1) else {
         if let Err(e) = tui::app::run() {
