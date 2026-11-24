@@ -59,3 +59,7 @@ pub fn define_and_bind(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/usda/material_test.rs"]
+mod tests;

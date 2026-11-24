@@ -10,3 +10,7 @@ pub mod skel;
 pub mod usda;
 
 pub use convert::convert;
+
+#[cfg(test)]
+#[path = "../../tests/src/core/mod_test.rs"]
+mod tests;

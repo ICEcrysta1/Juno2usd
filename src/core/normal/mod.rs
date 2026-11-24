@@ -9,3 +9,7 @@ pub mod smooth;
 
 pub use blend::blend_joints;
 pub use compute::compute;
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/normal/mod_test.rs"]
+mod tests;

@@ -29,3 +29,7 @@ impl Widget for SelectList {
         StatefulWidget::render(list, area, buf, &mut state);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/controls/select_test.rs"]
+mod tests;

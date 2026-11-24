@@ -329,3 +329,7 @@ pub fn run() -> io::Result<()> {
     terminal.show_cursor()?;
     result
 }
+
+#[cfg(test)]
+#[path = "../../tests/src/tui/app_test.rs"]
+mod tests;

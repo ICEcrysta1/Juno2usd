@@ -232,3 +232,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
 
     Some(mesh)
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/components/fuselage_test.rs"]
+mod tests;

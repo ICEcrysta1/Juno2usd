@@ -120,3 +120,7 @@ pub fn scale_ring(ring: &mut [Vec3], scale: Vec3) {
         c[2] *= scale[2];
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/algo/transform_test.rs"]
+mod tests;

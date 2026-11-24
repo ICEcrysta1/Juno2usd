@@ -66,3 +66,7 @@ pub fn bind(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/usda/skel_test.rs"]
+mod tests;

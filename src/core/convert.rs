@@ -127,3 +127,7 @@ fn dump_json(path: &Path, meshes: &[RawMesh]) -> Result<(), String> {
     out.push_str("}\n");
     std::fs::write(path, out).map_err(|e| format!("写入 JSON 失败: {e}"))
 }
+
+#[cfg(test)]
+#[path = "../../tests/src/core/convert_test.rs"]
+mod tests;

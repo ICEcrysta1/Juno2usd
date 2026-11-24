@@ -9,3 +9,7 @@ pub use banner::Banner;
 pub use button::Button;
 pub use panel::Panel;
 pub use select::SelectList;
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/controls/mod_test.rs"]
+mod tests;

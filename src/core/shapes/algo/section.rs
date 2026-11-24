@@ -119,3 +119,7 @@ pub fn shrink_radial(x: f64, z: f64, y: f64, wall: f64) -> Vec3 {
         [0.0, y, 0.0]
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/algo/section_test.rs"]
+mod tests;

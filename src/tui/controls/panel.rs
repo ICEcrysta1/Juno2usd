@@ -32,3 +32,7 @@ impl<W: Widget> Widget for Panel<W> {
         self.inner.render(inner, buf);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/controls/panel_test.rs"]
+mod tests;

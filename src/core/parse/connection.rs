@@ -60,3 +60,7 @@ pub fn parse(doc: &Document) -> ConnectionTree {
     tree.root_parts = roots;
     tree
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/parse/connection_test.rs"]
+mod tests;

@@ -7,3 +7,7 @@ pub mod skel;
 pub mod stage;
 
 pub use export::export;
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/usda/mod_test.rs"]
+mod tests;

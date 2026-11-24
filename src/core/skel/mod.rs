@@ -3,3 +3,7 @@
 pub mod build;
 
 pub use build::{Skeleton, build};
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/skel/mod_test.rs"]
+mod tests;

@@ -169,3 +169,7 @@ fn edges(f: &[usize; 3]) -> [(usize, usize); 3] {
         (f[2].min(f[0]), f[2].max(f[0])),
     ]
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/normal/smooth_test.rs"]
+mod tests;

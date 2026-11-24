@@ -8,3 +8,7 @@ pub mod components;
 
 pub use components::generate;
 pub use components::model::RawMesh;
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/shapes/mod_test.rs"]
+mod tests;

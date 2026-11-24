@@ -34,3 +34,7 @@ pub fn create(prefix: &str) -> Result<(Stage, String), String> {
 
     Ok((stage, root))
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/usda/stage_test.rs"]
+mod tests;

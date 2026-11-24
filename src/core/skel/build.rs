@@ -161,3 +161,7 @@ fn row_major(r: [[f64; 3]; 3], t: Vec3) -> [f64; 16] {
         t[0], t[1], t[2], 1.0,
     ]
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/skel/build_test.rs"]
+mod tests;

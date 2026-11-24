@@ -9,3 +9,7 @@ pub mod ring;
 pub mod section;
 pub mod transform;
 pub mod triangulate;
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/algo/mod_test.rs"]
+mod tests;

@@ -9,3 +9,7 @@ use crate::core::parse::Part;
 pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
     super::fuselage::generate(part, segments)
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/components/inlet_test.rs"]
+mod tests;

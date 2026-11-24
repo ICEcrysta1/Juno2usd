@@ -47,3 +47,7 @@ impl Settings {
         serde_saphyr::from_str(include_str!("defaults.yaml")).map_err(|e| e.to_string())
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/src/settings/mod_test.rs"]
+mod tests;

@@ -25,3 +25,7 @@ impl Widget for Banner {
             .render(rect, buf);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/controls/banner_test.rs"]
+mod tests;

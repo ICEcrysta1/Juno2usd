@@ -166,3 +166,7 @@ fn parse_floats(text: &str) -> Vec<f64> {
         .filter_map(|s| s.trim().parse().ok())
         .collect()
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/parse/part_test.rs"]
+mod tests;

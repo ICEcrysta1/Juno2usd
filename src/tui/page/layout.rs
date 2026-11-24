@@ -163,3 +163,7 @@ impl Widget for Info<'_> {
         Paragraph::new(text).render(cols[1], buf);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/page/layout_test.rs"]
+mod tests;

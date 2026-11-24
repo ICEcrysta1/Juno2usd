@@ -55,3 +55,7 @@ macro_rules! i18n {
 }
 
 pub(crate) use i18n;
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/i18n/i18n_test.rs"]
+mod tests;

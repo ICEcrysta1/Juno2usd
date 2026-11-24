@@ -10,3 +10,7 @@ pub mod part;
 
 pub use model::{Part, PartType};
 pub use part::parse_file;
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/parse/mod_test.rs"]
+mod tests;

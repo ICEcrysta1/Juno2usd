@@ -67,3 +67,7 @@ fn parse_hex_color(hex: &str) -> [f64; 3] {
         [1.0, 1.0, 1.0]
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/parse/material_test.rs"]
+mod tests;

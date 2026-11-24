@@ -19,3 +19,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/components/mod_test.rs"]
+mod tests;

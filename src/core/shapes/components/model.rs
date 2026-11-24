@@ -95,3 +95,7 @@ impl RawMesh {
         out
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/components/model_test.rs"]
+mod tests;

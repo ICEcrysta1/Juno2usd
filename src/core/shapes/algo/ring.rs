@@ -95,3 +95,7 @@ pub fn cap_annulus(faces: &mut Vec<[usize; 3]>, outer: &[usize], inner: &[usize]
         push_tri(faces, outer[i], inner[j], inner[i], invert);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/algo/ring_test.rs"]
+mod tests;

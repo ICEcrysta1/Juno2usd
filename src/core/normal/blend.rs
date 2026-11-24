@@ -227,3 +227,7 @@ fn write_all(mesh: &RawMesh, normals: &mut [Vec3], writes: &[(usize, Vec3)]) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/normal/blend_test.rs"]
+mod tests;

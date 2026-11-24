@@ -69,3 +69,7 @@ fn best_split(verts: &[Vec3], lp: &[usize]) -> ([usize; 3], [usize; 3]) {
         ([a, b, d], [b, c, d])
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/src/core/shapes/algo/triangulate_test.rs"]
+mod tests;

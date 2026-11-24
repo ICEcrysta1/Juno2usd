@@ -123,3 +123,7 @@ fn compact(meshes: &[&RawMesh], normals: &[&[Vec3]]) -> CompactMesh {
         normals: out_normals,
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/usda/export_test.rs"]
+mod tests;

@@ -45,3 +45,7 @@ impl Widget for Button {
         Paragraph::new(line).alignment(self.align).render(area, buf);
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/tui/controls/button_test.rs"]
+mod tests;

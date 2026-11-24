@@ -26,3 +26,7 @@ macro_rules! message {
 }
 
 pub(crate) use message;
+
+#[cfg(test)]
+#[path = "../../../../tests/src/tui/i18n/locales/en_test.rs"]
+mod tests;

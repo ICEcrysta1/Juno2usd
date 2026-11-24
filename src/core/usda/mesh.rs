@@ -68,3 +68,7 @@ pub fn write(stage: &Stage, path: &str, data: &CompactMesh) -> Result<(), String
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/usda/mesh_test.rs"]
+mod tests;

@@ -116,3 +116,7 @@ pub struct ParsedModel {
     pub parts: Vec<Part>,
     pub connections: super::connection::ConnectionTree,
 }
+
+#[cfg(test)]
+#[path = "../../../tests/src/core/parse/model_test.rs"]
+mod tests;
