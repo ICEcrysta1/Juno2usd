@@ -81,7 +81,9 @@ impl Widget for Page<'_> {
                 Constraint::Percentage(33),
             ])
             .split(rows[2]);
-        Button::new(i18n!(ui_key_select)).render(hints[0], buf);
+        Button::new(i18n!(ui_key_select))
+            .alignment(Alignment::Left)
+            .render(hints[0], buf);
         let mid = if self.running {
             match self.progress {
                 Some((i, n)) => format!("{} {}/{}", i18n!(ui_running), i, n),
@@ -90,8 +92,13 @@ impl Widget for Page<'_> {
         } else {
             i18n!(ui_key_convert).to_string()
         };
-        Button::new(mid).focused(self.running).render(hints[1], buf);
-        Button::new(i18n!(ui_key_quit)).render(hints[2], buf);
+        Button::new(mid)
+            .focused(self.running)
+            .alignment(Alignment::Center)
+            .render(hints[1], buf);
+        Button::new(i18n!(ui_key_quit))
+            .alignment(Alignment::Right)
+            .render(hints[2], buf);
     }
 }
 

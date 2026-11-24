@@ -2,15 +2,16 @@
 
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Alignment, Rect},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::Widget,
+    widgets::{Paragraph, Widget},
 };
 
 pub struct Button {
     label: String,
     focused: bool,
+    align: Alignment,
 }
 
 impl Button {
@@ -18,11 +19,17 @@ impl Button {
         Self {
             label: label.into(),
             focused: false,
+            align: Alignment::Left,
         }
     }
 
     pub fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
+        self
+    }
+
+    pub fn alignment(mut self, align: Alignment) -> Self {
+        self.align = align;
         self
     }
 }
@@ -34,6 +41,7 @@ impl Widget for Button {
         } else {
             Style::default()
         };
-        Line::from(Span::styled(format!(" {} ", self.label), style)).render(area, buf);
+        let line = Line::from(Span::styled(format!(" {} ", self.label), style));
+        Paragraph::new(line).alignment(self.align).render(area, buf);
     }
 }
