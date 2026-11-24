@@ -61,6 +61,14 @@ fn main() {
         settings.normals.sharp_edge_angle,
     );
 
+    // 骨骼：关节层级 + 零件绑定
+    let skeleton = core::skel::build(&model.parts, &model.connections);
+    println!(
+        "骨骼: {} 关节, {} 绑定",
+        skeleton.joints.len(),
+        skeleton.part_joint.len()
+    );
+
     if let Some(dump_path) = args.get(2) {
         dump_json(dump_path, &meshes);
         println!("已导出: {dump_path}");
@@ -77,6 +85,7 @@ fn main() {
             &model.materials,
             &meshes,
             &normals,
+            Some(&skeleton),
         )
         .expect("USD 导出失败");
         println!("USD 已导出: {usda_path}");

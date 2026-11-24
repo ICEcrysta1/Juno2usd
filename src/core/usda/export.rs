@@ -1,15 +1,17 @@
-//! USD 导出编排：按材质分组、紧凑化写出；不做几何生成与法线计算。
-//! 法线由调用方逐零件计算并经连接混合后传入。
+//! USD 导出编排：按 (关节, 材质) 分组、紧凑化写出；不做几何生成与法线计算。
+//! 法线由调用方逐零件计算并经连接混合后传入。有骨骼时写 SkelRoot/Skeleton 并绑定。
 
 use super::mesh::CompactMesh;
-use super::{material, mesh, stage};
+use super::{material, mesh, skel as usd_skel, stage};
 use crate::core::parse::material::{Material, clean_name};
 use crate::core::shapes::RawMesh;
 use crate::core::shapes::algo::transform::Vec3;
+use crate::core::skel::Skeleton;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// 导出 USDA：根 Xform + 每材质一个 Mesh + UsdPreviewSurface + faceVarying 法线。
+/// 导出 USDA：根 Xform + Mesh + UsdPreviewSurface + faceVarying 法线。
+/// skeleton 非空且有关节时启用 UsdSkel（SkelRoot 下按 (关节,材质) 分组并绑定）。
 /// normals 与 meshes 一一对应（世界空间）。
 pub fn export(
     output: &Path,
@@ -17,36 +19,59 @@ pub fn export(
     materials: &[Material],
     meshes: &[RawMesh],
     normals: &[Vec<Vec3>],
+    skeleton: Option<&Skeleton>,
 ) -> Result<(), String> {
     let (stage, root) = stage::create(prefix)?;
 
-    // 按材质分组（保持首次出现顺序），记录网格索引
-    let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+    let active = skeleton.filter(|s| !s.joints.is_empty());
+    let (parent, skel_path) = if let Some(sk) = active {
+        let sp = usd_skel::define(&stage, &format!("/{root}"), sk)?;
+        (format!("/{root}/SkelRoot"), Some(sp))
+    } else {
+        (format!("/{root}"), None)
+    };
+
+    // 按 (关节, 材质) 分组（保持首次出现顺序），记录网格索引
+    let mut groups: Vec<(Option<usize>, String, Vec<usize>)> = Vec::new();
     for (i, m) in meshes.iter().enumerate() {
-        match groups.iter_mut().find(|(name, _)| *name == m.material_name) {
-            Some((_, list)) => list.push(i),
-            None => groups.push((m.material_name.clone(), vec![i])),
+        let j = active.and_then(|sk| sk.part_joint.get(&m.part_id).copied());
+        match groups
+            .iter_mut()
+            .find(|(gj, gn, _)| *gj == j && *gn == m.material_name)
+        {
+            Some((_, _, list)) => list.push(i),
+            None => groups.push((j, m.material_name.clone(), vec![i])),
         }
     }
 
-    for (i, (mat_name, idxs)) in groups.iter().enumerate() {
+    for (i, (j, mat_name, idxs)) in groups.iter().enumerate() {
         let group_meshes: Vec<&RawMesh> = idxs.iter().map(|&i| &meshes[i]).collect();
         let group_normals: Vec<&[Vec3]> = idxs.iter().map(|&i| normals[i].as_slice()).collect();
         let compact = compact(&group_meshes, &group_normals);
         if compact.faces.is_empty() {
             continue;
         }
-        // 空材质名兜底（与旧导出器一致），且不创建/绑定材质
-        let mesh_name = if mat_name.is_empty() {
+        let mesh_name = if skel_path.is_some() {
+            let jl = j.map(|x| x.to_string()).unwrap_or_else(|| "Root".into());
+            let ml = if mat_name.is_empty() {
+                format!("M{i}")
+            } else {
+                mat_name.clone()
+            };
+            format!("Mesh_{jl}_{ml}")
+        } else if mat_name.is_empty() {
             format!("Mesh_{i}")
         } else {
             mat_name.clone()
         };
-        let mesh_path = format!("/{root}/{mesh_name}");
+        let mesh_path = format!("{parent}/{mesh_name}");
         mesh::write(&stage, &mesh_path, &compact)?;
         if !mat_name.is_empty() {
             let data = materials.iter().find(|m| clean_name(&m.name) == *mat_name);
             material::define_and_bind(&stage, &root, mat_name, data, &mesh_path)?;
+        }
+        if let (Some(sp), Some(ji)) = (&skel_path, j) {
+            usd_skel::bind(&stage, &mesh_path, sp, *ji, compact.points.len())?;
         }
     }
 
