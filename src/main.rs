@@ -24,6 +24,7 @@ fn main() {
     );
 
     let mut meshes: Vec<RawMesh> = Vec::new();
+    let mut part_ids: Vec<String> = Vec::new();
     let mut normals: Vec<Vec<shapes::algo::transform::Vec3>> = Vec::new();
     let mut total_v = 0;
     let mut total_f = 0;
@@ -42,6 +43,7 @@ fn main() {
                 total_f += world.faces.len();
                 // 法线：世界空间逐零件计算（自动平滑 + 端盖硬边）
                 let ns = core::normal::compute(&world, settings.normals.sharp_edge_angle);
+                part_ids.push(part.id.clone());
                 meshes.push(world);
                 normals.push(ns);
             }
@@ -49,6 +51,9 @@ fn main() {
         }
     }
     println!("总计: {total_v} 顶点, {total_f} 面");
+
+    // 连接感知接头法线混合（flattenNormals 门控 + 共轴判据）
+    core::normal::blend_joints(&meshes, &mut normals, &part_ids, &model.connections);
 
     if let Some(dump_path) = args.get(2) {
         dump_json(dump_path, &meshes);

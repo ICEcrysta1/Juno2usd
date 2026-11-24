@@ -3,7 +3,9 @@
 //! 不识别零件类型；朝向由绕序与角度阈值决定；
 //! 调用前应先焊接重合顶点（导出端负责）。
 
+pub mod blend;
 pub mod compute;
 pub mod smooth;
 
+pub use blend::blend_joints;
 pub use compute::compute;

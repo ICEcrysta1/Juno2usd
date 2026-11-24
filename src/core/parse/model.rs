@@ -38,6 +38,39 @@ impl PartType {
     }
 }
 
+/// 端部平滑开关（XML flattenNormals）。
+/// 游戏语义（与字面相反）：被覆盖的端 = 开平滑（参与接头法线匹配），缺省 = 关。
+/// 接头规则：双开互相平均；单开则开侧法线对齐关侧；双关不平滑。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FlattenNormals {
+    #[default]
+    None,
+    Top,
+    Bottom,
+    Both,
+}
+
+impl FlattenNormals {
+    pub fn from_xml(s: &str) -> Self {
+        match s {
+            "Top" => Self::Top,
+            "Bottom" => Self::Bottom,
+            "Both" => Self::Both,
+            _ => Self::None,
+        }
+    }
+
+    /// 底端是否开平滑
+    pub fn smooth_bottom(self) -> bool {
+        matches!(self, Self::Bottom | Self::Both)
+    }
+
+    /// 顶端是否开平滑
+    pub fn smooth_top(self) -> bool {
+        matches!(self, Self::Top | Self::Both)
+    }
+}
+
 /// Fuselage 参数（语义与 SR2 XML 一一对应）
 #[derive(Debug, Clone)]
 pub struct FuselageParams {
@@ -57,6 +90,8 @@ pub struct FuselageParams {
     pub clamp_distances: [f64; 8],
     /// 整体额外缩放，旋转前应用
     pub part_scale: Vec3,
+    /// 端部平滑开关（门控接头法线混合）
+    pub flatten_normals: FlattenNormals,
 }
 
 #[derive(Debug, Clone)]

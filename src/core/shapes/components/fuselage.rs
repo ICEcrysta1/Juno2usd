@@ -6,7 +6,7 @@
 use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, stitch_side};
 use super::super::algo::section::{apply_clamp, rounded_rect_point, shear_y, shrink_radial};
 use super::super::algo::transform::{Vec3, scale_ring};
-use super::model::{FaceGroup, RawMesh};
+use super::model::{FaceGroup, RawMesh, Rim};
 use crate::core::parse::Part;
 use std::f64::consts::PI;
 
@@ -173,6 +173,20 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             cap_fan(&mut f, c, &top_idx, true);
             mesh.add_faces(f, FaceGroup::Cap);
         }
+    }
+
+    // 端环：供接头法线混合（点退化端无环；smooth=该端开平滑）
+    if !bottom_is_point {
+        mesh.rims.push(Rim {
+            vertices: bottom_idx.clone(),
+            smooth: p.flatten_normals.smooth_bottom(),
+        });
+    }
+    if !top_is_point {
+        mesh.rims.push(Rim {
+            vertices: top_idx.clone(),
+            smooth: p.flatten_normals.smooth_top(),
+        });
     }
 
     Some(mesh)

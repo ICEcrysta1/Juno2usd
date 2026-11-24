@@ -56,7 +56,7 @@ pub fn compute(mesh: &RawMesh, sharp_edge_angle: f64) -> Vec<Vec3> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::parse::model::FuselageParams;
+    use crate::core::parse::model::{FlattenNormals, FuselageParams};
     use crate::core::parse::{Part, PartType};
     use crate::core::shapes;
     use crate::core::shapes::algo::transform::{dot, normalize};
@@ -80,6 +80,7 @@ mod tests {
                 corner_radiuses: corners,
                 clamp_distances: [1.0; 8],
                 part_scale: [1.0; 3],
+                flatten_normals: FlattenNormals::None,
             }),
             wall_thickness: 0.0,
             subdivisions: 5,

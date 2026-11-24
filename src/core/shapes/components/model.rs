@@ -11,6 +11,14 @@ pub enum FaceGroup {
     Cap,
 }
 
+/// 端环：顶点索引环 + 该端是否开平滑（flattenNormals 覆盖）。
+/// 供接头法线混合定位对接环并读取开关。
+#[derive(Debug, Clone)]
+pub struct Rim {
+    pub vertices: Vec<usize>,
+    pub smooth: bool,
+}
+
 /// 单个零件的网格（局部空间）。UV 与顶点一一对应，面只索引顶点。
 #[derive(Debug, Clone)]
 pub struct RawMesh {
@@ -23,6 +31,8 @@ pub struct RawMesh {
     pub face_groups: Vec<FaceGroup>,
     /// 强制平滑边（无序顶点对）：鼻锥环向等，覆盖角度判定
     pub smooth_edges: std::collections::HashSet<(usize, usize)>,
+    /// 端环：供接头法线混合定位对接环
+    pub rims: Vec<Rim>,
 }
 
 impl RawMesh {
@@ -35,6 +45,7 @@ impl RawMesh {
             faces: Vec::new(),
             face_groups: Vec::new(),
             smooth_edges: std::collections::HashSet::new(),
+            rims: Vec::new(),
         }
     }
 

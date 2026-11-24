@@ -1,0 +1,213 @@
+//! 连接感知接头法线混合。
+//!
+//! 每端开关由 flattenNormals 决定（被覆盖的端 = 开平滑）。对每条连接定位对接环后：
+//! - 双开：对接环对应顶点侧面法线互相平均；
+//! - 单开：开侧环法线对齐关侧（开侧迁就关侧，关侧保持不变）；
+//! - 双关：不平滑。
+//!
+//! 仅处理端面对接：两环须共轴（环平面法线平行），侧向连接（环平面垂直）跳过，
+//! 避免把嵌入侧面的零件端环误混合。端盖法线不参与（保持硬边）。
+
+use crate::core::parse::connection::ConnectionTree;
+use crate::core::shapes::RawMesh;
+use crate::core::shapes::algo::transform::{Vec3, dot, normalize};
+use crate::core::shapes::components::model::{FaceGroup, Rim};
+use std::collections::HashMap;
+
+/// 共轴判据：环平面法线 |点积| 下限（cos60°），低于此视为侧向连接
+const COAXIAL_COS: f64 = 0.5;
+
+/// meshes/normals 按零件顺序索引，part_ids 为对应零件 ID。
+pub fn blend_joints(
+    meshes: &[RawMesh],
+    normals: &mut [Vec<Vec3>],
+    part_ids: &[String],
+    connections: &ConnectionTree,
+) {
+    let idx_by_id: HashMap<&str, usize> = part_ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (id.as_str(), i))
+        .collect();
+
+    for conn in &connections.connections {
+        let (Some(&ia), Some(&ib)) = (
+            idx_by_id.get(conn.part_a.as_str()),
+            idx_by_id.get(conn.part_b.as_str()),
+        ) else {
+            continue;
+        };
+        let Some((ra, rb)) = closest_rims(&meshes[ia], &meshes[ib]) else {
+            continue;
+        };
+        // 双关：不平滑
+        if !ra.smooth && !rb.smooth {
+            continue;
+        }
+        // 侧向连接（环平面不共轴）：跳过
+        let na = rim_normal(&meshes[ia], ra);
+        let nb = rim_normal(&meshes[ib], rb);
+        if dot(na, nb).abs() < COAXIAL_COS {
+            continue;
+        }
+        blend_rim_pair(meshes, normals, ia, ra, ib, rb);
+    }
+}
+
+/// 找两零件质心最近的一对端环（即对接环）
+fn closest_rims<'a>(a: &'a RawMesh, b: &'a RawMesh) -> Option<(&'a Rim, &'a Rim)> {
+    let mut best: Option<(f64, &Rim, &Rim)> = None;
+    for ra in &a.rims {
+        for rb in &b.rims {
+            let d = dist(centroid(a, ra), centroid(b, rb));
+            if best.is_none_or(|(bd, _, _)| d < bd) {
+                best = Some((d, ra, rb));
+            }
+        }
+    }
+    best.map(|(_, ra, rb)| (ra, rb))
+}
+
+fn centroid(mesh: &RawMesh, rim: &Rim) -> Vec3 {
+    let mut c = [0.0; 3];
+    for &v in &rim.vertices {
+        let p = mesh.vertices[v];
+        c[0] += p[0];
+        c[1] += p[1];
+        c[2] += p[2];
+    }
+    let n = rim.vertices.len() as f64;
+    [c[0] / n, c[1] / n, c[2] / n]
+}
+
+/// 环平面法线（Newell），单位化
+fn rim_normal(mesh: &RawMesh, rim: &Rim) -> Vec3 {
+    let mut n = [0.0; 3];
+    let vs = &rim.vertices;
+    for i in 0..vs.len() {
+        let a = mesh.vertices[vs[i]];
+        let b = mesh.vertices[vs[(i + 1) % vs.len()]];
+        n[0] += (a[1] - b[1]) * (a[2] + b[2]);
+        n[1] += (a[2] - b[2]) * (a[0] + b[0]);
+        n[2] += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    normalize(n)
+}
+
+fn dist(a: Vec3, b: Vec3) -> f64 {
+    let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    dot(d, d).sqrt()
+}
+
+/// 按开关规则混合一对对接环
+fn blend_rim_pair(
+    meshes: &[RawMesh],
+    normals: &mut [Vec<Vec3>],
+    ia: usize,
+    ra: &Rim,
+    ib: usize,
+    rb: &Rim,
+) {
+    let na: Vec<Vec3> = ra
+        .vertices
+        .iter()
+        .map(|&v| vertex_side_normal(&meshes[ia], &normals[ia], v))
+        .collect();
+    let nb: Vec<Vec3> = rb
+        .vertices
+        .iter()
+        .map(|&v| vertex_side_normal(&meshes[ib], &normals[ib], v))
+        .collect();
+
+    match (ra.smooth, rb.smooth) {
+        // 双开：互相平均（先算后写，避免顺序偏差）
+        (true, true) => {
+            let mut wa: Vec<(usize, Vec3)> = Vec::new();
+            let mut wb: Vec<(usize, Vec3)> = Vec::new();
+            for (ka, &va) in ra.vertices.iter().enumerate() {
+                let kb = nearest(&meshes[ia], va, &meshes[ib], &rb.vertices);
+                let n = normalize([
+                    na[ka][0] + nb[kb][0],
+                    na[ka][1] + nb[kb][1],
+                    na[ka][2] + nb[kb][2],
+                ]);
+                if dot(n, n) > 0.5 {
+                    wa.push((va, n));
+                    wb.push((rb.vertices[kb], n));
+                }
+            }
+            write_all(&meshes[ia], &mut normals[ia], &wa);
+            write_all(&meshes[ib], &mut normals[ib], &wb);
+        }
+        // A 开 B 关：A 对齐 B
+        (true, false) => {
+            let mut wa: Vec<(usize, Vec3)> = Vec::new();
+            for &va in &ra.vertices {
+                let kb = nearest(&meshes[ia], va, &meshes[ib], &rb.vertices);
+                if dot(nb[kb], nb[kb]) > 0.5 {
+                    wa.push((va, nb[kb]));
+                }
+            }
+            write_all(&meshes[ia], &mut normals[ia], &wa);
+        }
+        // A 关 B 开：B 对齐 A
+        (false, true) => {
+            let mut wb: Vec<(usize, Vec3)> = Vec::new();
+            for &vb in &rb.vertices {
+                let ka = nearest(&meshes[ib], vb, &meshes[ia], &ra.vertices);
+                if dot(na[ka], na[ka]) > 0.5 {
+                    wb.push((vb, na[ka]));
+                }
+            }
+            write_all(&meshes[ib], &mut normals[ib], &wb);
+        }
+        (false, false) => {}
+    }
+}
+
+/// 目标顶点在另一环中的最近邻索引
+fn nearest(mesh: &RawMesh, v: usize, other: &RawMesh, ring: &[usize]) -> usize {
+    let p = mesh.vertices[v];
+    (0..ring.len())
+        .min_by(|&x, &y| {
+            dist(p, other.vertices[ring[x]]).total_cmp(&dist(p, other.vertices[ring[y]]))
+        })
+        .unwrap()
+}
+
+/// 顶点侧面代表法线：该顶点所有侧面面角法线的平均
+fn vertex_side_normal(mesh: &RawMesh, normals: &[Vec3], v: usize) -> Vec3 {
+    let mut acc = [0.0; 3];
+    let mut count = 0;
+    for (fi, f) in mesh.faces.iter().enumerate() {
+        if mesh.face_groups[fi] != FaceGroup::Side {
+            continue;
+        }
+        for k in 0..3 {
+            if f[k] == v {
+                let n = normals[fi * 3 + k];
+                acc[0] += n[0];
+                acc[1] += n[1];
+                acc[2] += n[2];
+                count += 1;
+            }
+        }
+    }
+    if count > 0 { normalize(acc) } else { [0.0; 3] }
+}
+
+/// 把法线写回顶点的所有侧面面角
+fn write_all(mesh: &RawMesh, normals: &mut [Vec3], writes: &[(usize, Vec3)]) {
+    for &(v, n) in writes {
+        for (fi, f) in mesh.faces.iter().enumerate() {
+            if mesh.face_groups[fi] != FaceGroup::Side {
+                continue;
+            }
+            for k in 0..3 {
+                if f[k] == v {
+                    normals[fi * 3 + k] = n;
+                }
+            }
+        }
+    }
+}

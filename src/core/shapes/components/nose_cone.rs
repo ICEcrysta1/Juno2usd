@@ -6,7 +6,7 @@
 use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, perimeter_edges, stitch_side};
 use super::super::algo::section::{apply_clamp, rounded_rect_point, shear_y, shrink_radial};
 use super::super::algo::transform::{Vec3, scale_ring};
-use super::model::{FaceGroup, RawMesh};
+use super::model::{FaceGroup, RawMesh, Rim};
 use crate::core::parse::Part;
 use std::f64::consts::PI;
 
@@ -156,6 +156,14 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         for ring in ir {
             mesh.smooth_edges.extend(perimeter_edges(ring));
         }
+    }
+
+    // 端环：鼻锥底环供接头法线混合（尖端为自由点，不参与）
+    if !rings.is_empty() && !tip_flags[0] {
+        mesh.rims.push(Rim {
+            vertices: rings[0].clone(),
+            smooth: p.flatten_normals.smooth_bottom(),
+        });
     }
 
     Some(mesh)
