@@ -244,4 +244,45 @@ mod tests {
         }
         assert!(smoothed > 0, "底环母线应平滑（法线被平均），不应整面硬棱");
     }
+
+    /// 空心缩 0 端：内外尖点各自独立顶点（不合并）
+    #[test]
+    fn hollow_point_end_separate_apex() {
+        let mut part = cylinder_part([1.0; 8]);
+        part.wall_thickness = 0.1;
+        if let Some(p) = &mut part.fuselage {
+            p.top_scale = [0.0; 2];
+        }
+        let mesh = shapes::generate(&part, 24).unwrap();
+        assert_eq!(mesh.hard_vertices.len(), 2, "空心缩0端应有内外两个独立硬点");
+        let mut ys: Vec<f64> = mesh
+            .hard_vertices
+            .iter()
+            .map(|&v| mesh.vertices[v][1])
+            .collect();
+        ys.sort_by(|a, b| a.total_cmp(b));
+        let tip_y = mesh.vertices.iter().map(|v| v[1]).fold(f64::MIN, f64::max);
+        assert!((ys[1] - tip_y).abs() < 1e-6, "外尖点应在顶端");
+        assert!(ys[0] < ys[1] - 1e-6, "内尖点应内缩，保留壁厚");
+    }
+
+    /// 空心鼻锥尖：内外尖点各自独立顶点（不合并）
+    #[test]
+    fn hollow_nose_cone_separate_apex() {
+        let mut part = cylinder_part([1.0; 8]);
+        part.part_type = PartType::NoseCone;
+        part.wall_thickness = 0.1;
+        if let Some(p) = &mut part.fuselage {
+            p.top_scale = [0.0; 2];
+        }
+        let mesh = shapes::generate(&part, 24).unwrap();
+        assert_eq!(mesh.apex_vertices.len(), 2, "空心鼻锥应有内外两个独立尖点");
+        let mut ys: Vec<f64> = mesh
+            .apex_vertices
+            .iter()
+            .map(|&v| mesh.vertices[v][1])
+            .collect();
+        ys.sort_by(|a, b| a.total_cmp(b));
+        assert!(ys[0] < ys[1] - 1e-6, "内尖点应内缩，保留壁厚");
+    }
 }

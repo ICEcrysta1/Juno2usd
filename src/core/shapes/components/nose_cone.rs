@@ -31,7 +31,17 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
     let mut mesh = RawMesh::new(part);
     let mut rings: Vec<Vec<usize>> = Vec::with_capacity(num_rings);
     let mut tip_flags: Vec<bool> = Vec::with_capacity(num_rings);
+    let mut inner_point_flags: Vec<bool> = Vec::with_capacity(num_rings);
     let mut inner_rings: Option<Vec<Vec<usize>>> = hollow.then(|| Vec::with_capacity(num_rings));
+
+    // 空心内尖点：外半径=wall 处（缓动轮廓 t^2.1），比外尖点靠内，保留壁厚
+    let r_eff_base = (p.radius_x * p.bottom_scale[0]).max(p.radius_z * p.bottom_scale[1]);
+    let inner_tip_y = if r_eff_base > wall {
+        let t_inner = (1.0 - wall / r_eff_base).powf(1.0 / 2.1);
+        -half_len + t_inner * p.length
+    } else {
+        -half_len
+    };
 
     for ring in 0..num_rings {
         let t = ring as f64 / subdivisions as f64;
@@ -75,15 +85,24 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
 
         let is_tip = ratio_x < 1e-6 && ratio_z < 1e-6;
 
-        // 内环从 clamp+scale 后、剪切前的坐标收缩（与圆柱不同，忠实保留旧语义）
+        // 内环从 clamp+scale 后、剪切前的坐标收缩；外半径≤wall 的环内腔已闭合，收拢到内尖点
+        let max_dist = coords
+            .iter()
+            .map(|c| (c[0] * c[0] + c[2] * c[2]).sqrt())
+            .fold(0.0, f64::max);
+        let inner_is_point = is_tip || max_dist <= wall;
         let inner_coords: Option<Vec<Vec3>> = hollow.then(|| {
-            coords
-                .iter()
-                .map(|&[x, yy, z]| {
-                    let s = shrink_radial(x, z, yy, wall);
-                    [s[0], shear_y(s[1], s[2], rz_scaled, cut_depth), s[2]]
-                })
-                .collect()
+            if inner_is_point {
+                vec![[0.0, inner_tip_y, 0.0]; segments]
+            } else {
+                coords
+                    .iter()
+                    .map(|&[x, yy, z]| {
+                        let s = shrink_radial(x, z, yy, wall);
+                        [s[0], shear_y(s[1], s[2], rz_scaled, cut_depth), s[2]]
+                    })
+                    .collect()
+            }
         });
         let sheared: Vec<Vec3> = coords
             .iter()
@@ -92,14 +111,15 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
 
         let ring_idx = emit_ring(&mut mesh, &sheared, t, is_tip.then_some([0.5, t]));
         let inner_idx = inner_coords.map(|ic| {
-            if is_tip {
-                vec![ring_idx[0]; segments]
+            if inner_is_point {
+                emit_ring(&mut mesh, &ic, t, Some([0.5, t]))
             } else {
                 emit_ring(&mut mesh, &ic, t, None)
             }
         });
         rings.push(ring_idx);
         tip_flags.push(is_tip);
+        inner_point_flags.push(inner_is_point);
         if let (Some(ir), Some(ii)) = (&mut inner_rings, inner_idx) {
             ir.push(ii);
         }
@@ -127,8 +147,8 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
                 &mut f,
                 &ir[ring],
                 &ir[ring + 1],
-                tip_flags[ring],
-                tip_flags[ring + 1],
+                inner_point_flags[ring],
+                inner_point_flags[ring + 1],
                 true,
             );
         }
@@ -158,10 +178,17 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
-    // 圆锥尖：入射边强制锐边（尖锐棱锥）
+    // 圆锥尖：入射边强制锐边（尖锐棱锥）；内外尖点各自独立顶点
     for (i, &is_tip) in tip_flags.iter().enumerate() {
         if is_tip {
             mesh.apex_vertices.insert(rings[i][0]);
+        }
+    }
+    if let Some(ir) = &inner_rings {
+        for (i, &ip) in inner_point_flags.iter().enumerate() {
+            if ip {
+                mesh.apex_vertices.insert(ir[i][0]);
+            }
         }
     }
 

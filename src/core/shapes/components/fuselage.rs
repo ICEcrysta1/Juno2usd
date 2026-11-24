@@ -27,6 +27,20 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
     let bottom_is_point = p.bottom_scale[0] < 1e-6 && p.bottom_scale[1] < 1e-6;
     let top_is_point = p.top_scale[0] < 1e-6 && p.top_scale[1] < 1e-6;
 
+    // 空心尖点内缩：内壁半径=外半径-wall，归零处比外尖点靠内 recess=wall*长/底半径，保留壁厚
+    let r_eff_b = (p.radius_x * p.bottom_scale[0]).max(p.radius_z * p.bottom_scale[1]);
+    let r_eff_t = (p.radius_x * p.top_scale[0]).max(p.radius_z * p.top_scale[1]);
+    let recess_t = if r_eff_b > 1e-9 {
+        (wall * p.length / r_eff_b).min(p.length)
+    } else {
+        0.0
+    };
+    let recess_b = if r_eff_t > 1e-9 {
+        (wall * p.length / r_eff_t).min(p.length)
+    } else {
+        0.0
+    };
+
     // 原始环坐标
     let mut bottom = Vec::with_capacity(segments);
     let mut top = Vec::with_capacity(segments);
@@ -49,7 +63,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         bottom.push([bx, -half_len, bz]);
         if let Some(inner) = &mut bottom_inner {
             inner.push(if bottom_is_point {
-                [0.0, -half_len, 0.0]
+                [0.0, -half_len + recess_b, 0.0]
             } else {
                 shrink_radial(bx, bz, -half_len, wall)
             });
@@ -67,7 +81,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         top.push([tx, half_len, tz]);
         if let Some(inner) = &mut top_inner {
             inner.push(if top_is_point {
-                [0.0, half_len, 0.0]
+                [0.0, half_len - recess_t, 0.0]
             } else {
                 shrink_radial(tx, tz, half_len, wall)
             });
@@ -106,7 +120,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
     let top = shear_ring(&top);
     let top_inner = top_inner.map(|inner| shear_ring(&inner));
 
-    // 发射环顶点（点退化共享中心顶点；内环点退化复用外环中心）
+    // 发射环顶点（点退化共享中心顶点；内外环各自独立中心，不合并）
     let mut mesh = RawMesh::new(part);
     let bottom_idx = emit_ring(
         &mut mesh,
@@ -117,18 +131,32 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
     let top_idx = emit_ring(&mut mesh, &top, 1.0, top_is_point.then_some([0.5, 0.5]));
     let bottom_inner_idx = bottom_inner.map(|inner| {
         if bottom_is_point {
-            vec![bottom_idx[0]; segments]
+            emit_ring(&mut mesh, &inner, 0.0, Some([0.5, 0.5]))
         } else {
             emit_ring(&mut mesh, &inner, 0.0, None)
         }
     });
     let top_inner_idx = top_inner.map(|inner| {
         if top_is_point {
-            vec![top_idx[0]; segments]
+            emit_ring(&mut mesh, &inner, 1.0, Some([0.5, 0.5]))
         } else {
             emit_ring(&mut mesh, &inner, 1.0, None)
         }
     });
+
+    // 缩 0 端：内外中心各自硬点（锥面母线保持光滑，避免整面放射状硬棱）
+    if bottom_is_point {
+        mesh.hard_vertices.insert(bottom_idx[0]);
+        if let Some(bi) = &bottom_inner_idx {
+            mesh.hard_vertices.insert(bi[0]);
+        }
+    }
+    if top_is_point {
+        mesh.hard_vertices.insert(top_idx[0]);
+        if let Some(ti) = &top_inner_idx {
+            mesh.hard_vertices.insert(ti[0]);
+        }
+    }
 
     // 侧面与端盖（侧面/端盖分 pass 算法线）
     let mut f = Vec::new();
@@ -187,14 +215,6 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             vertices: top_idx.clone(),
             smooth: p.flatten_normals.smooth_top(),
         });
-    }
-
-    // 缩 0 端：仅顶点硬角（锥面母线保持光滑，避免整面放射状硬棱）
-    if bottom_is_point {
-        mesh.hard_vertices.insert(bottom_idx[0]);
-    }
-    if top_is_point {
-        mesh.hard_vertices.insert(top_idx[0]);
     }
 
     Some(mesh)
