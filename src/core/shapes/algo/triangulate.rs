@@ -6,7 +6,7 @@
 //!   偏差相同选较短对角线（更均衡的三角形）。
 
 use super::super::RawMesh;
-use super::transform::{Vec3, cross, dot, normalize};
+use super::transform::{Vec3, dist, dot, face_normal, ring_normal};
 
 /// 把 mesh.quads 剖分为三角面转入 mesh.faces（保持绕序）
 pub fn triangulate(mesh: &mut RawMesh) {
@@ -52,9 +52,9 @@ fn dedup_consecutive(q: &[usize; 4]) -> Vec<usize> {
 /// 选最优对角线：最小化两三角法线对 quad 法线的偏差，平局选较短对角线
 fn best_split(verts: &[Vec3], lp: &[usize]) -> ([usize; 3], [usize; 3]) {
     let [a, b, c, d] = [lp[0], lp[1], lp[2], lp[3]];
-    let qn = quad_normal(verts, lp);
+    let qn = ring_normal(verts, lp);
     let dev = |t1: [usize; 3], t2: [usize; 3]| {
-        (1.0 - dot(tri_normal(verts, &t1), qn)) + (1.0 - dot(tri_normal(verts, &t2), qn))
+        (1.0 - dot(face_normal(verts, &t1), qn)) + (1.0 - dot(face_normal(verts, &t2), qn))
     };
     let d1 = dev([a, b, c], [a, c, d]);
     let d2 = dev([a, b, d], [b, c, d]);
@@ -68,31 +68,4 @@ fn best_split(verts: &[Vec3], lp: &[usize]) -> ([usize; 3], [usize; 3]) {
     } else {
         ([a, b, d], [b, c, d])
     }
-}
-
-fn quad_normal(verts: &[Vec3], lp: &[usize]) -> Vec3 {
-    let mut n = [0.0; 3];
-    for i in 0..lp.len() {
-        let a = verts[lp[i]];
-        let b = verts[lp[(i + 1) % lp.len()]];
-        n[0] += (a[1] - b[1]) * (a[2] + b[2]);
-        n[1] += (a[2] - b[2]) * (a[0] + b[0]);
-        n[2] += (a[0] - b[0]) * (a[1] + b[1]);
-    }
-    normalize(n)
-}
-
-fn tri_normal(verts: &[Vec3], f: &[usize; 3]) -> Vec3 {
-    let p1 = verts[f[0]];
-    let p2 = verts[f[1]];
-    let p3 = verts[f[2]];
-    normalize(cross(
-        [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
-        [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
-    ))
-}
-
-fn dist(a: Vec3, b: Vec3) -> f64 {
-    let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    dot(d, d).sqrt()
 }

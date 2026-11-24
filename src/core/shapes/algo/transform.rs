@@ -18,11 +18,23 @@ pub fn rotation_matrix(euler_deg: Vec3) -> [[f64; 3]; 3] {
     mat_mul(ry_m, mat_mul(rx_m, rz_m))
 }
 
-fn mat_mul(a: [[f64; 3]; 3], b: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+/// 3x3 矩阵乘
+pub fn mat_mul(a: [[f64; 3]; 3], b: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let mut out = [[0.0; 3]; 3];
     for i in 0..3 {
         for j in 0..3 {
             out[i][j] = a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j];
+        }
+    }
+    out
+}
+
+/// 3x3 转置
+pub fn transpose(m: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mut out = [[0.0; 3]; 3];
+    for i in 0..3 {
+        for j in 0..3 {
+            out[i][j] = m[j][i];
         }
     }
     out
@@ -63,6 +75,41 @@ pub fn normalize(v: Vec3) -> Vec3 {
     } else {
         [0.0; 3]
     }
+}
+
+/// 两点距离
+pub fn dist(a: Vec3, b: Vec3) -> f64 {
+    let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    dot(d, d).sqrt()
+}
+
+/// 三角面未归一化叉积（模长=2×面积，供退化判定）
+pub fn face_cross(verts: &[Vec3], f: &[usize; 3]) -> Vec3 {
+    let p1 = verts[f[0]];
+    let p2 = verts[f[1]];
+    let p3 = verts[f[2]];
+    cross(
+        [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
+        [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
+    )
+}
+
+/// 三角面单位法线
+pub fn face_normal(verts: &[Vec3], f: &[usize; 3]) -> Vec3 {
+    normalize(face_cross(verts, f))
+}
+
+/// 环平面法线（Newell），单位化
+pub fn ring_normal(verts: &[Vec3], ring: &[usize]) -> Vec3 {
+    let mut n = [0.0; 3];
+    for i in 0..ring.len() {
+        let a = verts[ring[i]];
+        let b = verts[ring[(i + 1) % ring.len()]];
+        n[0] += (a[1] - b[1]) * (a[2] + b[2]);
+        n[1] += (a[2] - b[2]) * (a[0] + b[0]);
+        n[2] += (a[0] - b[0]) * (a[1] + b[1]);
+    }
+    normalize(n)
 }
 
 /// 环坐标缩放（partScale）

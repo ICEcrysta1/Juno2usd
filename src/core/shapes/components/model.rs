@@ -3,8 +3,8 @@
 use super::super::algo::transform;
 use crate::core::parse::Part;
 
-/// 面二分：侧面走自动平滑（焊接后零件间光滑），端盖单独算平面法线（硬边）。
-/// 二者必须分 pass：焊接对接环边被侧+盖共 4 面共享，统一 pass 会判非流形锐边而拆开侧面。
+/// 面二分：侧面走自动平滑，端盖单独算平面法线（硬边）。
+/// 二者分 pass 计算，避免端盖与侧面相互拆边。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaceGroup {
     Side,

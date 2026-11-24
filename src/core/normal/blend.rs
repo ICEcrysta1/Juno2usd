@@ -11,7 +11,7 @@
 
 use crate::core::parse::connection::ConnectionTree;
 use crate::core::shapes::RawMesh;
-use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
+use crate::core::shapes::algo::transform::{Vec3, dist, dot, face_normal, normalize, ring_normal};
 use crate::core::shapes::components::model::{FaceGroup, Rim};
 use std::collections::HashMap;
 
@@ -49,7 +49,13 @@ pub fn blend_joints(
             continue;
         }
         // 侧向连接（环平面不共轴）：跳过
-        if dot(rim_normal(&meshes[ia], ra), rim_normal(&meshes[ib], rb)).abs() < COAXIAL_COS {
+        if dot(
+            ring_normal(&meshes[ia].vertices, &ra.vertices),
+            ring_normal(&meshes[ib].vertices, &rb.vertices),
+        )
+        .abs()
+            < COAXIAL_COS
+        {
             continue;
         }
         // 带硬角的环（方形截面）：整体不混合，保持 90° 硬边
@@ -88,25 +94,6 @@ fn centroid(mesh: &RawMesh, rim: &Rim) -> Vec3 {
     [c[0] / n, c[1] / n, c[2] / n]
 }
 
-/// 环平面法线（Newell），单位化
-fn rim_normal(mesh: &RawMesh, rim: &Rim) -> Vec3 {
-    let mut n = [0.0; 3];
-    let vs = &rim.vertices;
-    for i in 0..vs.len() {
-        let a = mesh.vertices[vs[i]];
-        let b = mesh.vertices[vs[(i + 1) % vs.len()]];
-        n[0] += (a[1] - b[1]) * (a[2] + b[2]);
-        n[1] += (a[2] - b[2]) * (a[0] + b[0]);
-        n[2] += (a[0] - b[0]) * (a[1] + b[1]);
-    }
-    normalize(n)
-}
-
-fn dist(a: Vec3, b: Vec3) -> f64 {
-    let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    dot(d, d).sqrt()
-}
-
 /// 环上是否存在硬角顶点（入射侧面法线夹角 > 阈值，如方形 90° 棱）
 fn rim_has_hard_corner(mesh: &RawMesh, rim: &Rim, cos_thresh: f64) -> bool {
     rim.vertices.iter().any(|&v| {
@@ -115,7 +102,7 @@ fn rim_has_hard_corner(mesh: &RawMesh, rim: &Rim, cos_thresh: f64) -> bool {
             .iter()
             .enumerate()
             .filter(|(fi, f)| mesh.face_groups[*fi] == FaceGroup::Side && f.contains(&v))
-            .map(|(_, f)| face_normal(mesh, f))
+            .map(|(_, f)| face_normal(&mesh.vertices, f))
             .collect();
         for i in 0..ns.len() {
             for j in i + 1..ns.len() {
@@ -126,16 +113,6 @@ fn rim_has_hard_corner(mesh: &RawMesh, rim: &Rim, cos_thresh: f64) -> bool {
         }
         false
     })
-}
-
-fn face_normal(mesh: &RawMesh, f: &[usize; 3]) -> Vec3 {
-    let p1 = mesh.vertices[f[0]];
-    let p2 = mesh.vertices[f[1]];
-    let p3 = mesh.vertices[f[2]];
-    normalize(cross(
-        [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
-        [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
-    ))
 }
 
 /// 按开关规则混合一对对接环（环已确认无硬角，逐顶点平均/对齐）

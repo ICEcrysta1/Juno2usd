@@ -3,7 +3,7 @@
 
 use crate::core::parse::Part;
 use crate::core::parse::connection::ConnectionTree;
-use crate::core::shapes::algo::transform::{Vec3, rotation_matrix};
+use crate::core::shapes::algo::transform::{Vec3, mat_mul, rotate_vec, rotation_matrix, transpose};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// 骨骼关节（拓扑序，path 含层级）
@@ -130,8 +130,9 @@ fn emit<'a>(
     let bind = row_major(r, t);
     let rest = match parent_world {
         Some((rp, tp)) => {
-            let rl = transpose_mul(rp, r);
-            let tl = transpose_apply(rp, [t[0] - tp[0], t[1] - tp[1], t[2] - tp[2]]);
+            let rpt = transpose(rp);
+            let rl = mat_mul(rpt, r);
+            let tl = rotate_vec(&rpt, [t[0] - tp[0], t[1] - tp[1], t[2] - tp[2]]);
             row_major(rl, tl)
         }
         None => bind,
@@ -159,24 +160,4 @@ fn row_major(r: [[f64; 3]; 3], t: Vec3) -> [f64; 16] {
         r[0][2], r[1][2], r[2][2], 0.0, //
         t[0], t[1], t[2], 1.0,
     ]
-}
-
-/// R_local = R_parentᵀ · R_child
-fn transpose_mul(rp: [[f64; 3]; 3], r: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
-    let mut out = [[0.0; 3]; 3];
-    for (i, row) in out.iter_mut().enumerate() {
-        for (k, cell) in row.iter_mut().enumerate() {
-            *cell = (0..3).map(|j| rp[j][i] * r[j][k]).sum();
-        }
-    }
-    out
-}
-
-/// t_local = R_parentᵀ · v
-fn transpose_apply(rp: [[f64; 3]; 3], v: Vec3) -> Vec3 {
-    let mut out = [0.0; 3];
-    for (i, cell) in out.iter_mut().enumerate() {
-        *cell = (0..3).map(|j| rp[j][i] * v[j]).sum();
-    }
-    out
 }

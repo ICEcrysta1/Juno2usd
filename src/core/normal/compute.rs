@@ -5,7 +5,7 @@
 
 use super::smooth;
 use crate::core::shapes::RawMesh;
-use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
+use crate::core::shapes::algo::transform::{Vec3, dot, face_normal};
 use crate::core::shapes::components::model::FaceGroup;
 
 /// 输出长度 = 3 × 面数，每面三个顶点法线按序排列
@@ -53,13 +53,7 @@ pub fn compute(mesh: &RawMesh, sharp_edge_angle: f64) -> Vec<Vec3> {
     // 端盖：平面法线（朝向由绕序决定），整面共享→硬边
     for &fi in &cap {
         let f = mesh.faces[fi];
-        let p1 = mesh.vertices[f[0]];
-        let p2 = mesh.vertices[f[1]];
-        let p3 = mesh.vertices[f[2]];
-        let n = normalize(cross(
-            [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
-            [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
-        ));
+        let n = face_normal(&mesh.vertices, &f);
         let n = if dot(n, n) > 0.5 { n } else { [0.0, 1.0, 0.0] };
         for k in 0..3 {
             out[fi * 3 + k] = n;
@@ -75,7 +69,7 @@ mod tests {
     use crate::core::parse::model::{FlattenNormals, FuselageParams};
     use crate::core::parse::{Part, PartType};
     use crate::core::shapes;
-    use crate::core::shapes::algo::transform::{dot, normalize};
+    use crate::core::shapes::algo::transform::{cross, dot, normalize};
 
     fn cylinder_part(corners: [f64; 8]) -> Part {
         Part {

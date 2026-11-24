@@ -5,9 +5,9 @@
 //! 2. 绕顶点将邻面按非锐边连成 smooth fan
 //! 3. 扇内按顶点处 corner angle 加权平均面法线，赋给每个面角（split normal）
 //!
-//! 调用前应先焊接重合顶点（Blender 的 Merge by Distance），由导出端负责。
+//! 逐零件计算；跨零件接头平滑由 normal::blend 单独处理。
 
-use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
+use crate::core::shapes::algo::transform::{Vec3, dot, face_cross, normalize};
 use std::collections::HashMap;
 
 /// 计算 faceVarying 法线，输出长度 = 3 × faces.len()。
@@ -168,14 +168,4 @@ fn edges(f: &[usize; 3]) -> [(usize, usize); 3] {
         (f[1].min(f[2]), f[1].max(f[2])),
         (f[2].min(f[0]), f[2].max(f[0])),
     ]
-}
-
-fn face_cross(vertices: &[Vec3], f: &[usize; 3]) -> Vec3 {
-    let p1 = vertices[f[0]];
-    let p2 = vertices[f[1]];
-    let p3 = vertices[f[2]];
-    cross(
-        [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
-        [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
-    )
 }
