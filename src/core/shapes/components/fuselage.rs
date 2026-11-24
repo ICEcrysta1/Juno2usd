@@ -130,7 +130,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     });
 
-    // 侧面与端盖（按组打标）
+    // 侧面与端盖（侧面/端盖分 pass 算法线）
     let mut f = Vec::new();
     stitch_side(
         &mut f,
@@ -140,31 +140,21 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         top_is_point,
         false,
     );
-    mesh.add_faces(f, FaceGroup::OuterSide);
+    mesh.add_faces(f, FaceGroup::Side);
 
     if let (Some(bi), Some(ti)) = (bottom_inner_idx, top_inner_idx) {
         let mut f = Vec::new();
         stitch_side(&mut f, &bi, &ti, bottom_is_point, top_is_point, true);
-        mesh.add_faces(f, FaceGroup::InnerSide);
+        mesh.add_faces(f, FaceGroup::Side);
         if !bottom_is_point {
             let mut f = Vec::new();
             cap_annulus(&mut f, &bottom_idx, &bi, false);
-            let g = if p.flatten_normals.bottom_flat() {
-                FaceGroup::CapBottom
-            } else {
-                FaceGroup::OuterSide
-            };
-            mesh.add_faces(f, g);
+            mesh.add_faces(f, FaceGroup::Cap);
         }
         if !top_is_point {
             let mut f = Vec::new();
             cap_annulus(&mut f, &top_idx, &ti, true);
-            let g = if p.flatten_normals.top_flat() {
-                FaceGroup::CapTop
-            } else {
-                FaceGroup::OuterSide
-            };
-            mesh.add_faces(f, g);
+            mesh.add_faces(f, FaceGroup::Cap);
         }
     } else {
         let [sx, sy, sz] = p.part_scale;
@@ -173,12 +163,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             let c = mesh.push_vertex(center, [0.5, 0.5]);
             let mut f = Vec::new();
             cap_fan(&mut f, c, &bottom_idx, false);
-            let g = if p.flatten_normals.bottom_flat() {
-                FaceGroup::CapBottom
-            } else {
-                FaceGroup::OuterSide
-            };
-            mesh.add_faces(f, g);
+            mesh.add_faces(f, FaceGroup::Cap);
         }
         if !top_is_point {
             let cd = 2.0 * p.offset[1] * shear * sy;
@@ -186,12 +171,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             let c = mesh.push_vertex(center, [0.5, 0.5]);
             let mut f = Vec::new();
             cap_fan(&mut f, c, &top_idx, true);
-            let g = if p.flatten_normals.top_flat() {
-                FaceGroup::CapTop
-            } else {
-                FaceGroup::OuterSide
-            };
-            mesh.add_faces(f, g);
+            mesh.add_faces(f, FaceGroup::Cap);
         }
     }
 

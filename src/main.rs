@@ -24,6 +24,7 @@ fn main() {
     );
 
     let mut meshes: Vec<RawMesh> = Vec::new();
+    let mut normals: Vec<Vec<shapes::algo::transform::Vec3>> = Vec::new();
     let mut total_v = 0;
     let mut total_f = 0;
     for part in &model.parts {
@@ -39,7 +40,10 @@ fn main() {
                 );
                 total_v += world.vertices.len();
                 total_f += world.faces.len();
+                // 法线：世界空间逐零件计算（自动平滑 + 端盖硬边）
+                let ns = core::normal::compute(&world, settings.normals.sharp_edge_angle);
                 meshes.push(world);
+                normals.push(ns);
             }
             None => println!("  {} ({:?}): 无几何", part.id, part.part_type),
         }
@@ -61,7 +65,7 @@ fn main() {
             &prefix,
             &model.materials,
             &meshes,
-            settings.normals.sharp_edge_angle,
+            &normals,
         )
         .expect("USD 导出失败");
         println!("USD 已导出: {usda_path}");

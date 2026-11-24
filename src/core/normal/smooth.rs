@@ -1,28 +1,28 @@
-//! 平滑法线：绕顶点面扇连通块 + 锐边拆分 + 面积加权平均。
+//! 平滑法线：忠实 Blender "Smooth by Angle"（自动平滑）算法。
 //!
-//! 对每个顶点，将其邻面按"共享该顶点入射边"连成面扇，锐边处断开，
-//! 每个连通块内面积加权平均（等价 Blender 标记锐边的拆边语义）：
-//! - 尖端顶点所有边标锐 → 闭合面扇逐面断开 → 星芒收尖；
-//! - 扇面底环处仅扇面间为锐边，经环带平滑边重新连通 → 无断层；
-//! - 方形角点两侧面被锐边分开 → 轴对齐硬边。
+//! 参考 Blender `bmesh_mesh_normals.cc`：
+//! 1. 标锐边：边界边（1 面）/ 非流形边（>2 面）自动锐；恰好 2 面则法线夹角 > 阈值 → 锐
+//! 2. 绕顶点将邻面按非锐边连成 smooth fan
+//! 3. 扇内按顶点处 corner angle 加权平均面法线，赋给每个面角（split normal）
+//!
+//! 调用前应先焊接重合顶点（Blender 的 Merge by Distance），由导出端负责。
 
 use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-/// 计算一组侧面的 faceVarying 法线，输出长度 = 3 × faces.len()。
-/// sharp_edges 为几何声明的锐边（无序顶点对）。
+/// 计算 faceVarying 法线，输出长度 = 3 × faces.len()。
+/// smooth_edges 为强制平滑边（跨零件界面），覆盖角度判定。
 pub fn smooth_normals(
     vertices: &[Vec3],
     faces: &[[usize; 3]],
     threshold_deg: f64,
-    sharp_edges: &HashSet<(usize, usize)>,
+    smooth_edges: &std::collections::HashSet<(usize, usize)>,
 ) -> Vec<Vec3> {
     let n = faces.len();
     if n == 0 {
         return Vec::new();
     }
 
-    // 未归一化面法线（模长 = 2×面积，天然面积加权）
     let area_normals: Vec<Vec3> = faces.iter().map(|f| face_cross(vertices, f)).collect();
     let unit: Vec<Vec3> = area_normals.iter().map(|&c| normalize(c)).collect();
     let valid: Vec<bool> = area_normals.iter().map(|&c| dot(c, c) > 1e-24).collect();
@@ -35,29 +35,31 @@ pub fn smooth_normals(
         }
     }
 
-    // 自动锐边：相邻面二面角超阈值（仅有效面之间）
-    let cos_thresh = threshold_deg.to_radians().cos();
+    // 边 → 面 邻接
     let mut edge_faces: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
     for (fi, f) in faces.iter().enumerate() {
         for e in edges(f) {
             edge_faces.entry(e).or_default().push(fi);
         }
     }
-    let mut sharp = sharp_edges.clone();
+
+    // 标锐边：边界/非流形自动锐；2 面按角度阈值
+    let cos_thresh = threshold_deg.to_radians().cos();
+    let mut sharp: HashMap<(usize, usize), bool> = HashMap::new();
     for (e, adj) in &edge_faces {
-        if adj.len() == 2
-            && valid[adj[0]]
-            && valid[adj[1]]
-            && dot(unit[adj[0]], unit[adj[1]]) < cos_thresh
-        {
-            sharp.insert(*e);
-        }
+        let is_sharp = if smooth_edges.contains(e) {
+            false
+        } else if adj.len() != 2 {
+            true
+        } else {
+            dot(unit[adj[0]], unit[adj[1]]) < cos_thresh
+        };
+        sharp.insert(*e, is_sharp);
     }
 
-    // 逐顶点：面扇按非锐边连通分块，块内面积加权平均
+    // 逐顶点：smooth fan 连通块 + corner angle 加权平均
     let mut out = vec![[0.0; 3]; n * 3];
     for (&v, fs) in &vert_faces {
-        // 并查集：共享 v 入射边且非锐边的面连通
         let mut parent: HashMap<usize, usize> = fs.iter().map(|&f| (f, f)).collect();
         fn find(parent: &mut HashMap<usize, usize>, x: usize) -> usize {
             let mut r = x;
@@ -75,7 +77,7 @@ pub fn smooth_normals(
         for (ai, &fa) in fs.iter().enumerate() {
             for &fb in &fs[ai + 1..] {
                 if let Some(e) = shared_edge_at(&faces[fa], &faces[fb], v)
-                    && !sharp.contains(&e)
+                    && !sharp.get(&e).copied().unwrap_or(true)
                 {
                     let (ra, rb) = (find(&mut parent, fa), find(&mut parent, fb));
                     if ra != rb {
@@ -85,19 +87,20 @@ pub fn smooth_normals(
             }
         }
 
-        // 块内累加（仅有效面贡献权重）
+        // 块内按 corner angle 加权累加（仅有效面贡献）
         let mut acc: HashMap<usize, Vec3> = HashMap::new();
         for &fi in fs {
-            if valid[fi] {
-                let root = find(&mut parent, fi);
-                let a = acc.entry(root).or_insert([0.0; 3]);
-                a[0] += area_normals[fi][0];
-                a[1] += area_normals[fi][1];
-                a[2] += area_normals[fi][2];
+            if !valid[fi] {
+                continue;
             }
+            let w = corner_angle(vertices, &faces[fi], v);
+            let root = find(&mut parent, fi);
+            let a = acc.entry(root).or_insert([0.0; 3]);
+            a[0] += w * unit[fi][0];
+            a[1] += w * unit[fi][1];
+            a[2] += w * unit[fi][2];
         }
 
-        // 写回每个面角
         for &fi in fs {
             let root = find(&mut parent, fi);
             let nrm = acc.get(&root).copied().map(normalize).unwrap_or([0.0; 3]);
@@ -108,7 +111,6 @@ pub fn smooth_normals(
             } else {
                 [0.0, 1.0, 0.0]
             };
-            // fi 中顶点 v 的所有出现位置（焊接后可能重复索引）
             for k in 0..3 {
                 if faces[fi][k] == v {
                     out[fi * 3 + k] = nrm;
@@ -117,6 +119,23 @@ pub fn smooth_normals(
         }
     }
     out
+}
+
+/// 面 f 在顶点 v 处的 corner angle（两条入射边夹角）
+fn corner_angle(vertices: &[Vec3], f: &[usize; 3], v: usize) -> f64 {
+    let p = vertices[v];
+    let mut dirs = Vec::with_capacity(2);
+    for &idx in f {
+        if idx != v {
+            let q = vertices[idx];
+            dirs.push(normalize([q[0] - p[0], q[1] - p[1], q[2] - p[2]]));
+        }
+    }
+    if dirs.len() == 2 {
+        dot(dirs[0], dirs[1]).clamp(-1.0, 1.0).acos()
+    } else {
+        0.0
+    }
 }
 
 /// 两面在顶点 v 处的共享边（无序顶点对）

@@ -1,9 +1,8 @@
-//! 法线纯数学执行器：消费面分组，输出局部空间 faceVarying 法线。
+//! 法线纯数学执行器：忠实 Blender "Smooth by Angle" 自动平滑。
 //!
-//! 不识别零件类型；朝向由绕序决定，永不硬编码方向；
-//! 世界变换由调用方经 algo::transform 完成。
+//! 不识别零件类型；朝向由绕序与角度阈值决定；
+//! 调用前应先焊接重合顶点（导出端负责）。
 
-pub mod cap;
 pub mod compute;
 pub mod smooth;
 

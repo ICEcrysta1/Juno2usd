@@ -3,7 +3,7 @@
 //! subdivisions+1 个环，半径按 t^2.1 缓动插值，
 //! offset/形变/圆角/clamp 随 t 线性插值；尖端退化为单顶点。
 
-use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, stitch_side};
+use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, perimeter_edges, stitch_side};
 use super::super::algo::section::{apply_clamp, rounded_rect_point, shear_y, shrink_radial};
 use super::super::algo::transform::{Vec3, scale_ring};
 use super::model::{FaceGroup, RawMesh};
@@ -105,7 +105,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
-    // 环间侧面（尖端环按点退化处理，直接发射三角扇）；按组打标
+    // 环间侧面（尖端环按点退化处理，直接发射三角扇）
     let mut f = Vec::new();
     for ring in 0..subdivisions {
         stitch_side(
@@ -117,7 +117,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             false,
         );
     }
-    mesh.add_faces(f, FaceGroup::OuterSide);
+    mesh.add_faces(f, FaceGroup::Side);
 
     let has_bottom_cap = p.bottom_scale[0] > 1e-6 || p.bottom_scale[1] > 1e-6;
     if let Some(ir) = &inner_rings {
@@ -132,16 +132,11 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
                 true,
             );
         }
-        mesh.add_faces(f, FaceGroup::InnerSide);
+        mesh.add_faces(f, FaceGroup::Side);
         if has_bottom_cap {
             let mut f = Vec::new();
             cap_annulus(&mut f, &rings[0], &ir[0], false);
-            let g = if p.flatten_normals.bottom_flat() {
-                FaceGroup::CapBottom
-            } else {
-                FaceGroup::OuterSide
-            };
-            mesh.add_faces(f, g);
+            mesh.add_faces(f, FaceGroup::Cap);
         }
     } else if has_bottom_cap {
         let [sx, sy, sz] = p.part_scale;
@@ -149,26 +144,17 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         let c = mesh.push_vertex(center, [0.5, 0.5]);
         let mut f = Vec::new();
         cap_fan(&mut f, c, &rings[0], false);
-        let g = if p.flatten_normals.bottom_flat() {
-            FaceGroup::CapBottom
-        } else {
-            FaceGroup::OuterSide
-        };
-        mesh.add_faces(f, g);
+        mesh.add_faces(f, FaceGroup::Cap);
     }
 
-    // 尖端锐边：组成尖端顶点的所有边标锐（Blender 点锐边语义），
-    // 扇面在尖端互不平均→星芒收尖；底环与环带间仍平滑→无断层
-    if let Some(&tip) = rings.last().and_then(|r| r.first())
-        && tip_flags.last().copied().unwrap_or(false)
-    {
-        for &v in &rings[subdivisions - 1] {
-            mesh.sharp_edges.insert((tip.min(v), tip.max(v)));
-        }
-        if let Some(ir) = &inner_rings {
-            for &v in &ir[subdivisions - 1] {
-                mesh.sharp_edges.insert((tip.min(v), tip.max(v)));
-            }
+    // 鼻锥为光滑旋转曲面：环向 perimeter 边强制平滑（消除分段轮廓折痕），
+    // 竖直边仍走角度判定（teardrop 捏折等保留硬边）
+    for ring in &rings {
+        mesh.smooth_edges.extend(perimeter_edges(ring));
+    }
+    if let Some(ir) = &inner_rings {
+        for ring in ir {
+            mesh.smooth_edges.extend(perimeter_edges(ring));
         }
     }
 

@@ -12,4 +12,4 @@ hollow:
   wall_thickness: 0.045       # Inlet/Fairing 默认壁厚
 
 normals:
-  sharp_edge_angle: 40.0      # 锐边判定阈值（度）
+  sharp_edge_angle: 60.0      # 自动平滑锐边阈值（度），对齐 Blender Smooth by Angle

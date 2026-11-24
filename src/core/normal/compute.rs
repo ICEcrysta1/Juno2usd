@@ -1,29 +1,52 @@
-//! 法线编排：按面分组分发，输出与面一一对应的 faceVarying 法线（局部空间）。
+//! 法线编排：侧面跑 Blender 自动平滑，端盖单独算平面法线，输出 faceVarying 法线。
+//!
+//! 侧面/端盖分 pass：焊接对接环边被侧+盖共 4 面共享，统一 pass 会判非流形锐边
+//! 而拆开侧面、破坏零件间平滑；分 pass 后侧面（焊接）光滑、端盖硬边。
+//! 世界变换由调用方经 algo::transform 完成（或直接在合并后的世界网格上计算）。
 
-use super::{cap, smooth};
-use crate::core::shapes::algo::transform::Vec3;
-use crate::core::shapes::components::model::{FaceGroup, RawMesh};
-use std::collections::HashMap;
+use super::smooth;
+use crate::core::shapes::RawMesh;
+use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
+use crate::core::shapes::components::model::FaceGroup;
 
 /// 输出长度 = 3 × 面数，每面三个顶点法线按序排列
 pub fn compute(mesh: &RawMesh, sharp_edge_angle: f64) -> Vec<Vec3> {
     let mut out = vec![[0.0; 3]; mesh.faces.len() * 3];
 
-    let mut by_group: HashMap<FaceGroup, Vec<usize>> = HashMap::new();
+    let mut side: Vec<usize> = Vec::new();
+    let mut cap: Vec<usize> = Vec::new();
     for (fi, g) in mesh.face_groups.iter().enumerate() {
-        by_group.entry(*g).or_default().push(fi);
+        match g {
+            FaceGroup::Side => side.push(fi),
+            FaceGroup::Cap => cap.push(fi),
+        }
     }
 
-    for (g, idxs) in by_group {
-        let faces: Vec<[usize; 3]> = idxs.iter().map(|&i| mesh.faces[i]).collect();
-        let normals = if g.is_side() {
-            smooth::smooth_normals(&mesh.vertices, &faces, sharp_edge_angle, &mesh.sharp_edges)
-        } else {
-            // 端盖为平面：整组共享一个平面法线
-            vec![cap::cap_normal(&mesh.vertices, &faces); faces.len() * 3]
-        };
-        for (k, &fi) in idxs.iter().enumerate() {
-            out[fi * 3..fi * 3 + 3].copy_from_slice(&normals[k * 3..k * 3 + 3]);
+    // 侧面：自动平滑
+    let side_faces: Vec<[usize; 3]> = side.iter().map(|&i| mesh.faces[i]).collect();
+    let ns = smooth::smooth_normals(
+        &mesh.vertices,
+        &side_faces,
+        sharp_edge_angle,
+        &mesh.smooth_edges,
+    );
+    for (k, &fi) in side.iter().enumerate() {
+        out[fi * 3..fi * 3 + 3].copy_from_slice(&ns[k * 3..k * 3 + 3]);
+    }
+
+    // 端盖：平面法线（朝向由绕序决定），整面共享→硬边
+    for &fi in &cap {
+        let f = mesh.faces[fi];
+        let p1 = mesh.vertices[f[0]];
+        let p2 = mesh.vertices[f[1]];
+        let p3 = mesh.vertices[f[2]];
+        let n = normalize(cross(
+            [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
+            [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
+        ));
+        let n = if dot(n, n) > 0.5 { n } else { [0.0, 1.0, 0.0] };
+        for k in 0..3 {
+            out[fi * 3 + k] = n;
         }
     }
 
@@ -33,12 +56,12 @@ pub fn compute(mesh: &RawMesh, sharp_edge_angle: f64) -> Vec<Vec3> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::parse::model::{FlattenNormals, FuselageParams};
+    use crate::core::parse::model::FuselageParams;
     use crate::core::parse::{Part, PartType};
     use crate::core::shapes;
     use crate::core::shapes::algo::transform::{dot, normalize};
 
-    fn cylinder_part(corners: [f64; 8], flatten: FlattenNormals) -> Part {
+    fn cylinder_part(corners: [f64; 8]) -> Part {
         Part {
             id: "t".into(),
             part_type: PartType::Fuselage,
@@ -57,96 +80,64 @@ mod tests {
                 corner_radiuses: corners,
                 clamp_distances: [1.0; 8],
                 part_scale: [1.0; 3],
-                flatten_normals: flatten,
             }),
             wall_thickness: 0.0,
             subdivisions: 5,
         }
     }
 
-    /// 扁平端（Both）：侧面法线径向、端盖法线轴向硬边
+    /// 圆柱：侧面法线径向；垂直端盖（90°>60°）自动硬边→轴向
     #[test]
     fn cylinder_side_radial_caps_axial() {
-        let part = cylinder_part([1.0; 8], FlattenNormals::Both);
+        let part = cylinder_part([1.0; 8]);
         let mesh = shapes::generate(&part, 24).unwrap();
-        let ns = compute(&mesh, 40.0);
+        let ns = compute(&mesh, 60.0);
+        let mut saw_cap = false;
         for (fi, f) in mesh.faces.iter().enumerate() {
             for k in 0..3 {
                 let n = ns[fi * 3 + k];
                 let v = mesh.vertices[f[k]];
-                match mesh.face_groups[fi] {
-                    FaceGroup::OuterSide => {
-                        let radial = normalize([v[0], 0.0, v[2]]);
-                        assert!(dot(n, radial) > 0.99, "侧面法线非径向: {n:?}");
-                        assert!(n[1].abs() < 1e-6, "侧面法线含 Y 分量: {n:?}");
-                    }
-                    FaceGroup::CapBottom => {
-                        assert!(dot(n, [0.0, -1.0, 0.0]) > 0.999, "底盖法线错误: {n:?}")
-                    }
-                    FaceGroup::CapTop => {
-                        assert!(dot(n, [0.0, 1.0, 0.0]) > 0.999, "顶盖法线错误: {n:?}")
-                    }
-                    FaceGroup::InnerSide => {}
+                if n[1].abs() > 0.99 {
+                    // 端盖法线轴向
+                    saw_cap = true;
+                } else {
+                    // 侧面法线径向
+                    let radial = normalize([v[0], 0.0, v[2]]);
+                    assert!(dot(n, radial) > 0.99, "侧面法线非径向: {n:?}");
                 }
             }
         }
+        assert!(saw_cap, "应存在轴向端盖法线");
     }
 
-    /// 平滑端（None）：端盖并入侧面组，边缘法线向轴向倾斜（零件间光滑过渡）
-    #[test]
-    fn smooth_end_rim_normals_blend() {
-        let part = cylinder_part([1.0; 8], FlattenNormals::None);
-        let mesh = shapes::generate(&part, 24).unwrap();
-        let ns = compute(&mesh, 40.0);
-        let mut rim_tilted = false;
-        for (fi, f) in mesh.faces.iter().enumerate() {
-            if mesh.face_groups[fi] != FaceGroup::OuterSide {
-                continue;
-            }
-            for k in 0..3 {
-                let n = ns[fi * 3 + k];
-                let v = mesh.vertices[f[k]];
-                // 顶环边缘顶点（y=+1）：法线应含 +Y 分量（与端盖混合）
-                if (v[1] - 1.0).abs() < 1e-9 && n[1] > 0.1 {
-                    rim_tilted = true;
-                }
-            }
-        }
-        assert!(rim_tilted, "平滑端边缘法线未向轴向倾斜");
-    }
-
-    /// 方形截面：锐边拆分后侧面法线轴对齐（硬边存在）
+    /// 方形截面：90° 棱 > 60° → 硬边，侧面法线轴对齐
     #[test]
     fn square_cross_section_hard_edges() {
-        let part = cylinder_part([0.0; 8], FlattenNormals::Both);
+        let part = cylinder_part([0.0; 8]);
         let mesh = shapes::generate(&part, 24).unwrap();
-        let ns = compute(&mesh, 40.0);
+        let ns = compute(&mesh, 60.0);
         for (fi, _) in mesh.faces.iter().enumerate() {
-            if mesh.face_groups[fi] != FaceGroup::OuterSide {
-                continue;
-            }
             for k in 0..3 {
-                let f = mesh.faces[fi];
                 let n = ns[fi * 3 + k];
-                let v = mesh.vertices[f[k]];
-                // 端盖已扁平分离，侧面顶点法线轴对齐
+                if n[1].abs() > 0.99 {
+                    continue; // 端盖
+                }
                 let axis = n[0].abs().max(n[2].abs());
-                assert!(axis > 0.99, "方形侧面法线非轴对齐: {n:?} (v={v:?})");
+                assert!(axis > 0.99, "方形侧面法线非轴对齐: {n:?}");
             }
         }
     }
 
-    /// 鼻锥尖端：组成尖端的边标锐 → 相邻扇面在尖端法线不同（星芒收尖），
-    /// 且尖端法线接近各自扇面法线（不被环带稀释）
+    /// 鼻锥尖端：60° 下扇面平滑 → 尖端法线轴向（亮尖点）
     #[test]
-    fn nose_cone_apex_sharp_split() {
-        let mut part = cylinder_part([1.0; 8], FlattenNormals::None);
+    fn nose_cone_apex_axial() {
+        let mut part = cylinder_part([1.0; 8]);
         part.part_type = PartType::NoseCone;
         if let Some(p) = &mut part.fuselage {
             p.top_scale = [0.0; 2];
         }
         let mesh = shapes::generate(&part, 24).unwrap();
-        let ns = compute(&mesh, 40.0);
+        let ns = compute(&mesh, 60.0);
         let tip = mesh
             .vertices
             .iter()
@@ -154,23 +145,16 @@ mod tests {
             .max_by(|a, b| a.1[1].total_cmp(&b.1[1]))
             .unwrap()
             .0;
-        assert!(!mesh.sharp_edges.is_empty(), "尖端应声明锐边");
-        // 收集含尖端的面及其尖端法线
-        let mut apex_normals: Vec<Vec3> = Vec::new();
+        let mut checked = 0;
         for (fi, f) in mesh.faces.iter().enumerate() {
-            if mesh.face_groups[fi] != FaceGroup::OuterSide {
-                continue;
-            }
             for k in 0..3 {
                 if f[k] == tip {
-                    apex_normals.push(ns[fi * 3 + k]);
+                    let n = ns[fi * 3 + k];
+                    assert!(dot(n, [0.0, 1.0, 0.0]) > 0.99, "尖端法线非轴向: {n:?}");
+                    checked += 1;
                 }
             }
         }
-        assert!(apex_normals.len() >= 24, "尖端扇面数不足");
-        // 相邻扇面尖端法线应不同（锐边拆分），且都带 +Y 分量（朝上收尖）
-        let distinct = apex_normals.windows(2).any(|w| dot(w[0], w[1]) < 0.999);
-        assert!(distinct, "尖端扇面法线未拆分（仍被平均成圆顶）");
-        assert!(apex_normals.iter().all(|n| n[1] > 0.0), "尖端法线应朝上");
+        assert!(checked > 0, "未找到尖端面");
     }
 }

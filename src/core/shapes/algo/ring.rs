@@ -7,6 +7,18 @@
 use super::super::RawMesh;
 use super::transform::Vec3;
 
+/// 环 perimeter 边（无序顶点对）
+pub fn perimeter_edges(ring: &[usize]) -> Vec<(usize, usize)> {
+    let n = ring.len();
+    (0..n)
+        .map(|i| {
+            let a = ring[i];
+            let b = ring[(i + 1) % n];
+            (a.min(b), a.max(b))
+        })
+        .collect()
+}
+
 /// 发射环顶点（UV 的 v 坐标固定）；point_uv 为 Some 时退化为单中心顶点，整环共享
 pub fn emit_ring(
     mesh: &mut RawMesh,

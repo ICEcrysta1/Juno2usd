@@ -38,36 +38,6 @@ impl PartType {
     }
 }
 
-/// 端部法线扁平化（XML flattenNormals）：
-/// 扁平端 → 端盖独立硬边组；非扁平端 → 端盖并入侧面平滑组，零件间连接光滑过渡
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FlattenNormals {
-    #[default]
-    None,
-    Top,
-    Bottom,
-    Both,
-}
-
-impl FlattenNormals {
-    pub fn from_xml(s: &str) -> Self {
-        match s {
-            "Top" => Self::Top,
-            "Bottom" => Self::Bottom,
-            "Both" => Self::Both,
-            _ => Self::None,
-        }
-    }
-
-    pub fn bottom_flat(self) -> bool {
-        matches!(self, Self::Bottom | Self::Both)
-    }
-
-    pub fn top_flat(self) -> bool {
-        matches!(self, Self::Top | Self::Both)
-    }
-}
-
 /// Fuselage 参数（语义与 SR2 XML 一一对应）
 #[derive(Debug, Clone)]
 pub struct FuselageParams {
@@ -87,8 +57,6 @@ pub struct FuselageParams {
     pub clamp_distances: [f64; 8],
     /// 整体额外缩放，旋转前应用
     pub part_scale: Vec3,
-    /// 端部法线扁平化
-    pub flatten_normals: FlattenNormals,
 }
 
 #[derive(Debug, Clone)]

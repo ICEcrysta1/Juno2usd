@@ -1,22 +1,14 @@
-//! 几何数据定义：面分组与零件网格。
+//! 几何数据定义：零件网格。
 
 use super::super::algo::transform;
 use crate::core::parse::Part;
 
-/// 面分组：几何生成时打标，供法线模块消费，无需事后分类
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// 面二分：侧面走自动平滑（焊接后零件间光滑），端盖单独算平面法线（硬边）。
+/// 二者必须分 pass：焊接对接环边被侧+盖共 4 面共享，统一 pass 会判非流形锐边而拆开侧面。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FaceGroup {
-    OuterSide,
-    InnerSide,
-    CapBottom,
-    CapTop,
-}
-
-impl FaceGroup {
-    /// 侧面组走平滑组算法；端盖组取平面法线
-    pub fn is_side(self) -> bool {
-        matches!(self, Self::OuterSide | Self::InnerSide)
-    }
+    Side,
+    Cap,
 }
 
 /// 单个零件的网格（局部空间）。UV 与顶点一一对应，面只索引顶点。
@@ -29,8 +21,8 @@ pub struct RawMesh {
     pub faces: Vec<[usize; 3]>,
     /// 与 faces 一一对应
     pub face_groups: Vec<FaceGroup>,
-    /// 几何声明的锐边（无序顶点对），如鼻锥尖端顶点的所有边
-    pub sharp_edges: std::collections::HashSet<(usize, usize)>,
+    /// 强制平滑边（无序顶点对）：鼻锥环向等，覆盖角度判定
+    pub smooth_edges: std::collections::HashSet<(usize, usize)>,
 }
 
 impl RawMesh {
@@ -42,7 +34,7 @@ impl RawMesh {
             uvs: Vec::new(),
             faces: Vec::new(),
             face_groups: Vec::new(),
-            sharp_edges: std::collections::HashSet::new(),
+            smooth_edges: std::collections::HashSet::new(),
         }
     }
 
@@ -53,7 +45,7 @@ impl RawMesh {
         idx
     }
 
-    /// 追加一批面并打上分组标签
+    /// 追加一批面并打标签
     pub fn add_faces(&mut self, faces: Vec<[usize; 3]>, group: FaceGroup) {
         self.face_groups
             .resize(self.faces.len() + faces.len(), group);
