@@ -158,6 +158,13 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
+    // 圆锥尖：入射边强制锐边（尖锐棱锥）
+    for (i, &is_tip) in tip_flags.iter().enumerate() {
+        if is_tip {
+            mesh.apex_vertices.insert(rings[i][0]);
+        }
+    }
+
     // 端环：鼻锥底环供接头法线混合（尖端为自由点，不参与）
     if !rings.is_empty() && !tip_flags[0] {
         mesh.rims.push(Rim {

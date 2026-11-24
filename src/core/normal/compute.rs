@@ -24,11 +24,27 @@ pub fn compute(mesh: &RawMesh, sharp_edge_angle: f64) -> Vec<Vec3> {
 
     // 侧面：自动平滑
     let side_faces: Vec<[usize; 3]> = side.iter().map(|&i| mesh.faces[i]).collect();
+    // 尖点入射边强制锐边（圆锥顶点 / 缩 0 端保持尖锐）
+    let mut sharp_edges: std::collections::HashSet<(usize, usize)> =
+        std::collections::HashSet::new();
+    if !mesh.apex_vertices.is_empty() {
+        for f in &side_faces {
+            for k in 0..3 {
+                let a = f[k];
+                let b = f[(k + 1) % 3];
+                if mesh.apex_vertices.contains(&a) || mesh.apex_vertices.contains(&b) {
+                    sharp_edges.insert((a.min(b), a.max(b)));
+                }
+            }
+        }
+    }
     let ns = smooth::smooth_normals(
         &mesh.vertices,
         &side_faces,
         sharp_edge_angle,
         &mesh.smooth_edges,
+        &sharp_edges,
+        &mesh.hard_vertices,
     );
     for (k, &fi) in side.iter().enumerate() {
         out[fi * 3..fi * 3 + 3].copy_from_slice(&ns[k * 3..k * 3 + 3]);
@@ -129,9 +145,9 @@ mod tests {
         }
     }
 
-    /// 鼻锥尖端：60° 下扇面平滑 → 尖端法线轴向（亮尖点）
+    /// 鼻锥尖端：入射边强制锐边 → 尖端面角法线 = 面法线（尖锐，不圆滑）
     #[test]
-    fn nose_cone_apex_axial() {
+    fn nose_cone_apex_sharp() {
         let mut part = cylinder_part([1.0; 8]);
         part.part_type = PartType::NoseCone;
         if let Some(p) = &mut part.fuselage {
@@ -148,14 +164,84 @@ mod tests {
             .0;
         let mut checked = 0;
         for (fi, f) in mesh.faces.iter().enumerate() {
+            if !f.contains(&tip) {
+                continue;
+            }
+            let p1 = mesh.vertices[f[0]];
+            let p2 = mesh.vertices[f[1]];
+            let p3 = mesh.vertices[f[2]];
+            let fnrm = normalize(cross(
+                [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
+                [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
+            ));
             for k in 0..3 {
                 if f[k] == tip {
                     let n = ns[fi * 3 + k];
-                    assert!(dot(n, [0.0, 1.0, 0.0]) > 0.99, "尖端法线非轴向: {n:?}");
+                    assert!(dot(n, fnrm) > 0.99, "尖端应锐边（=面法线），实际 {n:?}");
                     checked += 1;
                 }
             }
         }
         assert!(checked > 0, "未找到尖端面");
+    }
+
+    /// 缩 0 端（非圆锥）：顶点硬角（=面法线），但母线在底环处仍平滑（≠面法线）
+    #[test]
+    fn fuselage_point_end_hard_tip_smooth_side() {
+        let mut part = cylinder_part([1.0; 8]);
+        if let Some(p) = &mut part.fuselage {
+            p.top_scale = [0.0; 2];
+        }
+        let mesh = shapes::generate(&part, 24).unwrap();
+        let ns = compute(&mesh, 60.0);
+        let tip = mesh
+            .vertices
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1[1].total_cmp(&b.1[1]))
+            .unwrap()
+            .0;
+        let face_n = |f: &[usize; 3]| {
+            let p1 = mesh.vertices[f[0]];
+            let p2 = mesh.vertices[f[1]];
+            let p3 = mesh.vertices[f[2]];
+            normalize(cross(
+                [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
+                [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
+            ))
+        };
+        // 顶点硬角：面角法线 = 面法线
+        let mut checked_tip = 0;
+        for (fi, f) in mesh.faces.iter().enumerate() {
+            if !f.contains(&tip) {
+                continue;
+            }
+            let fnrm = face_n(f);
+            for k in 0..3 {
+                if f[k] == tip {
+                    assert!(dot(ns[fi * 3 + k], fnrm) > 0.99, "缩0端顶点应硬角");
+                    checked_tip += 1;
+                }
+            }
+        }
+        assert!(checked_tip > 0, "未找到尖端面");
+        // 底环侧面平滑：母线未标锐 → 底环面角法线被平均（≠面法线）
+        // 底环侧面平滑：母线未标锐 → 底环面角法线被平均（≠面法线）
+        let base_y = mesh.vertices[tip][1] - 2.0;
+        let mut smoothed = 0;
+        for (fi, f) in mesh.faces.iter().enumerate() {
+            if mesh.face_groups[fi] != FaceGroup::Side {
+                continue;
+            }
+            let fnrm = face_n(f);
+            for k in 0..3 {
+                if (mesh.vertices[f[k]][1] - base_y).abs() < 1e-6
+                    && dot(ns[fi * 3 + k], fnrm) < 0.999
+                {
+                    smoothed += 1;
+                }
+            }
+        }
+        assert!(smoothed > 0, "底环母线应平滑（法线被平均），不应整面硬棱");
     }
 }

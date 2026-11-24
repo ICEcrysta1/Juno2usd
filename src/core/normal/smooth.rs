@@ -11,12 +11,16 @@ use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
 use std::collections::HashMap;
 
 /// 计算 faceVarying 法线，输出长度 = 3 × faces.len()。
-/// smooth_edges 为强制平滑边（跨零件界面），覆盖角度判定。
+/// smooth_edges 为强制平滑边（跨零件界面），sharp_edges 为强制锐边（圆锥尖入射边），
+/// 二者均覆盖角度判定；sharp 优先。hard_vertices 为硬点顶点：仅该顶点面角取面法线，
+/// 其入射边在其他顶点处仍正常平滑（缩 0 端硬点但锥面光滑）。
 pub fn smooth_normals(
     vertices: &[Vec3],
     faces: &[[usize; 3]],
     threshold_deg: f64,
     smooth_edges: &std::collections::HashSet<(usize, usize)>,
+    sharp_edges: &std::collections::HashSet<(usize, usize)>,
+    hard_vertices: &std::collections::HashSet<usize>,
 ) -> Vec<Vec3> {
     let n = faces.len();
     if n == 0 {
@@ -47,7 +51,9 @@ pub fn smooth_normals(
     let cos_thresh = threshold_deg.to_radians().cos();
     let mut sharp: HashMap<(usize, usize), bool> = HashMap::new();
     for (e, adj) in &edge_faces {
-        let is_sharp = if smooth_edges.contains(e) {
+        let is_sharp = if sharp_edges.contains(e) {
+            true
+        } else if smooth_edges.contains(e) {
             false
         } else if adj.len() != 2 {
             true
@@ -74,14 +80,17 @@ pub fn smooth_normals(
             }
             r
         }
-        for (ai, &fa) in fs.iter().enumerate() {
-            for &fb in &fs[ai + 1..] {
-                if let Some(e) = shared_edge_at(&faces[fa], &faces[fb], v)
-                    && !sharp.get(&e).copied().unwrap_or(true)
-                {
-                    let (ra, rb) = (find(&mut parent, fa), find(&mut parent, fb));
-                    if ra != rb {
-                        parent.insert(ra, rb);
+        // 硬点顶点：不合并扇面 → 每个面角取自身面法线（硬角）；入射边在其他顶点仍平滑
+        if !hard_vertices.contains(&v) {
+            for (ai, &fa) in fs.iter().enumerate() {
+                for &fb in &fs[ai + 1..] {
+                    if let Some(e) = shared_edge_at(&faces[fa], &faces[fb], v)
+                        && !sharp.get(&e).copied().unwrap_or(true)
+                    {
+                        let (ra, rb) = (find(&mut parent, fa), find(&mut parent, fb));
+                        if ra != rb {
+                            parent.insert(ra, rb);
+                        }
                     }
                 }
             }

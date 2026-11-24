@@ -189,5 +189,13 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         });
     }
 
+    // 缩 0 端：仅顶点硬角（锥面母线保持光滑，避免整面放射状硬棱）
+    if bottom_is_point {
+        mesh.hard_vertices.insert(bottom_idx[0]);
+    }
+    if top_is_point {
+        mesh.hard_vertices.insert(top_idx[0]);
+    }
+
     Some(mesh)
 }
