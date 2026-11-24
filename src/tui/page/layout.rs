@@ -17,9 +17,12 @@ pub struct Page<'a> {
     pub selected: usize,
     pub input: &'a str,
     pub output: &'a str,
-    pub components: &'a str,
-    pub skel: &'a str,
+    pub parts: &'a str,
+    pub connections: &'a str,
+    pub materials: &'a str,
     pub size: &'a str,
+    pub faces: Option<usize>,
+    pub skel: Option<usize>,
     pub running: bool,
     pub progress: Option<(usize, usize)>,
 }
@@ -60,9 +63,12 @@ impl Widget for Page<'_> {
             Info {
                 input: self.input,
                 output: self.output,
-                components: self.components,
-                skel: self.skel,
+                parts: self.parts,
+                connections: self.connections,
+                materials: self.materials,
                 size: self.size,
+                faces: self.faces,
+                skel: self.skel,
             },
         )
         .render(cols[2], buf);
@@ -107,30 +113,41 @@ impl Widget for Top<'_> {
     }
 }
 
-/// 右盒内容：输入/输出/面数/骨骼/大小
+/// 右盒内容：转换前统计（零件/连接/材质/输入大小）+ 转换后面数/骨骼
 struct Info<'a> {
     input: &'a str,
     output: &'a str,
-    components: &'a str,
-    skel: &'a str,
+    parts: &'a str,
+    connections: &'a str,
+    materials: &'a str,
     size: &'a str,
+    faces: Option<usize>,
+    skel: Option<usize>,
 }
 
 impl Widget for Info<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let text = format!(
-            "{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}",
+        let mut text = format!(
+            "{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}: {}",
             i18n!(ui_input),
             self.input,
             i18n!(ui_output),
             self.output,
-            i18n!(ui_components),
-            self.components,
-            i18n!(ui_skel),
-            self.skel,
+            i18n!(ui_parts),
+            self.parts,
+            i18n!(ui_connections),
+            self.connections,
+            i18n!(ui_materials),
+            self.materials,
             i18n!(ui_size),
             self.size,
         );
+        if let Some(f) = self.faces {
+            text.push_str(&format!("\n{}: {} K", i18n!(ui_faces), f / 1000));
+        }
+        if let Some(s) = self.skel {
+            text.push_str(&format!("\n{}: {}", i18n!(ui_skel), s));
+        }
         // 与选择列表一致的 2 列左缩进，不贴边框
         let cols = Layout::default()
             .direction(Direction::Horizontal)

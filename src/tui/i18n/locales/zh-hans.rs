@@ -11,9 +11,12 @@ macro_rules! message {
     // 右盒标签。
     (ui_input) => { "输入" };
     (ui_output) => { "输出" };
-    (ui_components) => { "面数" };
-    (ui_skel) => { "骨骼" };
+    (ui_parts) => { "零件" };
+    (ui_connections) => { "连接" };
+    (ui_materials) => { "材质" };
     (ui_size) => { "大小" };
+    (ui_faces) => { "面数" };
+    (ui_skel) => { "骨骼" };
 
     // 状态与底部按键。
     (ui_running) => { "转换中" };

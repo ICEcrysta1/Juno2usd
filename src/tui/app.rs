@@ -1,4 +1,6 @@
-//! TUI 应用：状态 + 按键 + 后台转换，驱动 page 渲染。
+//! TUI 应用：UI 优先。右栏 XML 解析后台执行，解析中显示旋转加载；
+//! 快速切换时旧解析结果按 epoch 丢弃、立即解析新选中；解析结果按文件签名内存缓存，
+//! 文件变更（len+mtime）即失效。不阻塞输入。
 
 use crate::core::convert::{self, Report};
 use crate::tui::page::Page;
@@ -12,11 +14,46 @@ use ratatui::{
     },
     widgets::Widget,
 };
-use std::{io, path::PathBuf, sync::mpsc, thread, time::Duration};
+use std::{
+    collections::HashMap,
+    io,
+    path::PathBuf,
+    sync::mpsc,
+    thread,
+    time::{Duration, SystemTime},
+};
+
+const SPINNER: [char; 10] = [
+    '\u{280B}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283C}', '\u{2834}', '\u{2826}', '\u{2827}',
+    '\u{2807}', '\u{280F}',
+];
+
+type Stats = (usize, usize, usize);
+type Sig = (u64, SystemTime);
 
 enum Msg {
     Progress(String),
     Done(Result<Report, String>),
+    Parsed {
+        index: usize,
+        epoch: u64,
+        stats: Option<Stats>,
+        sig: Option<Sig>,
+    },
+}
+
+fn fmt_size(len: u64) -> String {
+    if len >= 1024 * 1024 {
+        format!("{:.1} MiB", len as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{} KiB", len / 1024)
+    }
+}
+
+fn sig_of(p: &PathBuf) -> Option<Sig> {
+    std::fs::metadata(p)
+        .ok()
+        .map(|m| (m.len(), m.modified().unwrap_or(SystemTime::UNIX_EPOCH)))
 }
 
 struct App {
@@ -25,10 +62,19 @@ struct App {
     selected: usize,
     running: bool,
     progress: Option<(usize, usize)>,
-    rx: Option<mpsc::Receiver<Msg>>,
-    components: String,
-    skel: String,
-    size: String,
+    tx: mpsc::Sender<Msg>,
+    rx: mpsc::Receiver<Msg>,
+    parsed: Option<usize>,
+    pending: Option<usize>,
+    epoch: u64,
+    frame: u64,
+    cache: HashMap<PathBuf, (Sig, Stats)>,
+    parts: Option<usize>,
+    connections: Option<usize>,
+    materials: Option<usize>,
+    size_in: String,
+    faces: Option<usize>,
+    skel: Option<usize>,
 }
 
 impl App {
@@ -50,16 +96,26 @@ impl App {
                     .into_owned()
             })
             .collect();
+        let (tx, rx) = mpsc::channel();
         Self {
             paths,
             names,
             selected: 0,
             running: false,
             progress: None,
-            rx: None,
-            components: "…".into(),
-            skel: "…".into(),
-            size: "…".into(),
+            tx,
+            rx,
+            parsed: None,
+            pending: None,
+            epoch: 0,
+            frame: 0,
+            cache: HashMap::new(),
+            parts: None,
+            connections: None,
+            materials: None,
+            size_in: "…".into(),
+            faces: None,
+            skel: None,
         }
     }
 
@@ -67,6 +123,66 @@ impl App {
         let p = self.paths.get(self.selected)?;
         let stem = p.file_stem()?.to_string_lossy().into_owned();
         Some(PathBuf::from("Output").join(format!("{stem}_rust.usda")))
+    }
+
+    fn apply(&mut self, s: Stats) {
+        self.parts = Some(s.0);
+        self.connections = Some(s.1);
+        self.materials = Some(s.2);
+    }
+
+    /// 每帧调用：缓存命中立即用；否则后台解析（旧 epoch 丢弃）
+    fn refresh(&mut self) {
+        let idx = self.selected;
+        let Some(p) = self.paths.get(idx).cloned() else {
+            self.size_in = "…".into();
+            return;
+        };
+        if self.parsed != Some(idx) {
+            self.parsed = Some(idx);
+            self.faces = None;
+            self.skel = None;
+        }
+        let sig = sig_of(&p);
+        self.size_in = sig.map(|s| fmt_size(s.0)).unwrap_or_else(|| "…".into());
+
+        // 缓存命中（签名一致）→ 立即显示
+        if let Some((cs, stats)) = self.cache.get(&p) {
+            if sig == Some(*cs) {
+                self.apply(*stats);
+                self.pending = None;
+                return;
+            }
+        }
+        // 已在解析当前选中 → 等待
+        if self.pending == Some(idx) {
+            return;
+        }
+        self.pending = Some(idx);
+        self.epoch += 1;
+        self.parts = None;
+        self.connections = None;
+        self.materials = None;
+        let epoch = self.epoch;
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            let stats = crate::settings::Settings::load()
+                .ok()
+                .and_then(|s| crate::core::parse::parse_file(&p, &s).ok())
+                .map(|m| {
+                    (
+                        m.parts.len(),
+                        m.connections.connections.len(),
+                        m.materials.len(),
+                    )
+                });
+            let _ = tx.send(Msg::Parsed {
+                index: idx,
+                epoch,
+                stats,
+                sig: sig_of(&p),
+            });
+        });
     }
 
     fn start(&mut self) {
@@ -79,10 +195,9 @@ impl App {
         let Some(output) = self.output_path() else {
             return;
         };
-        let (tx, rx) = mpsc::channel();
-        self.rx = Some(rx);
         self.running = true;
         self.progress = None;
+        let tx = self.tx.clone();
         thread::spawn(move || {
             let r = convert::convert(&input, None, Some(&output), |m| {
                 let _ = tx.send(Msg::Progress(m.to_string()));
@@ -92,8 +207,7 @@ impl App {
     }
 
     fn drain(&mut self) {
-        let Some(rx) = &self.rx else { return };
-        while let Ok(msg) = rx.try_recv() {
+        while let Ok(msg) = self.rx.try_recv() {
             match msg {
                 Msg::Progress(m) => {
                     if let Some(rest) = m.strip_prefix("几何+法线 ")
@@ -106,25 +220,35 @@ impl App {
                 Msg::Done(r) => {
                     self.running = false;
                     self.progress = None;
-                    match r {
-                        Ok(rep) => {
-                            self.components = format!("{} K", rep.faces / 1000);
-                            self.skel = rep.joints.to_string();
-                            self.size = self
-                                .output_path()
-                                .and_then(|p| std::fs::metadata(p).ok())
-                                .map(|m| format!("{} KiB", m.len() / 1024))
-                                .unwrap_or_else(|| "…".into());
+                    if let Ok(rep) = r {
+                        self.faces = Some(rep.faces);
+                        self.skel = Some(rep.joints);
+                    }
+                }
+                Msg::Parsed {
+                    index,
+                    epoch,
+                    stats,
+                    sig,
+                } => {
+                    // 过期解析（用户已切换）直接丢弃
+                    if epoch != self.epoch || index != self.selected {
+                        continue;
+                    }
+                    self.pending = None;
+                    if let Some(s) = stats {
+                        if let Some(g) = sig {
+                            self.cache.insert(self.paths[index].clone(), (g, s));
                         }
-                        Err(_) => {
-                            self.components = "…".into();
-                            self.skel = "…".into();
-                            self.size = "ERR".into();
-                        }
+                        self.apply(s);
                     }
                 }
             }
         }
+    }
+
+    fn loading(&self) -> bool {
+        self.pending == Some(self.selected) && self.parts.is_none()
     }
 }
 
@@ -140,6 +264,8 @@ pub fn run() -> io::Result<()> {
     let version = env!("CARGO_PKG_VERSION");
 
     let result = loop {
+        app.frame += 1;
+        app.refresh();
         app.drain();
         terminal.draw(|f| {
             let input = app
@@ -151,6 +277,14 @@ pub fn run() -> io::Result<()> {
                 .output_path()
                 .map(|p| p.display().to_string())
                 .unwrap_or_default();
+            let spin = SPINNER[(app.frame % SPINNER.len() as u64) as usize].to_string();
+            let num = |v: Option<usize>| {
+                if app.loading() {
+                    spin.clone()
+                } else {
+                    v.map(|n| n.to_string()).unwrap_or_else(|| "…".into())
+                }
+            };
             Page {
                 version,
                 workspace: &workspace,
@@ -158,9 +292,12 @@ pub fn run() -> io::Result<()> {
                 selected: app.selected,
                 input: &input,
                 output: &output,
-                components: &app.components,
-                skel: &app.skel,
-                size: &app.size,
+                parts: &num(app.parts),
+                connections: &num(app.connections),
+                materials: &num(app.materials),
+                size: &app.size_in,
+                faces: app.faces,
+                skel: app.skel,
                 running: app.running,
                 progress: app.progress,
             }

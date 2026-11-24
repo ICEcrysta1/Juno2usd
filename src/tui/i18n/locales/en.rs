@@ -6,14 +6,17 @@ macro_rules! message {
     (ui_title) => { "Juno2USD Version: {}" };
     (ui_workspace) => { "WorkSpace" };
     (ui_choose) => { "Choose" };
-    (ui_info) => { "info" };
+    (ui_info) => { "Info" };
 
     // Right-panel labels.
     (ui_input) => { "Input" };
     (ui_output) => { "Output" };
-    (ui_components) => { "Components" };
-    (ui_skel) => { "Skel" };
+    (ui_parts) => { "Parts" };
+    (ui_connections) => { "Connections" };
+    (ui_materials) => { "Materials" };
     (ui_size) => { "Size" };
+    (ui_faces) => { "Faces" };
+    (ui_skel) => { "Skel" };
 
     // Status and bottom keys.
     (ui_running) => { "Converting" };
