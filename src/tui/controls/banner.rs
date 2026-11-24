@@ -2,7 +2,7 @@
 
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Alignment, Rect},
     widgets::{Paragraph, Widget},
 };
 
@@ -12,6 +12,16 @@ pub struct Banner;
 
 impl Widget for Banner {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        Paragraph::new(BANNER).render(area, buf);
+        let h = (BANNER.lines().count() as u16).min(area.height);
+        let y = area.y + area.height.saturating_sub(h) / 2;
+        let rect = Rect {
+            x: area.x,
+            y,
+            width: area.width,
+            height: h,
+        };
+        Paragraph::new(BANNER)
+            .alignment(Alignment::Center)
+            .render(rect, buf);
     }
 }

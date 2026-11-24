@@ -9,7 +9,10 @@ fn main() {
     tui::i18n::init_from_env();
     let args: Vec<String> = std::env::args().collect();
     let Some(input) = args.get(1) else {
-        println!("{}", tui::i18n::i18n!(ui_usage));
+        if let Err(e) = tui::app::run() {
+            eprintln!("TUI 错误: {e}");
+            std::process::exit(1);
+        }
         return;
     };
     let dump = args.get(2).map(Path::new);

@@ -2,7 +2,7 @@
 
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Alignment, Rect},
     widgets::{Block, BorderType, Borders, Widget},
 };
 
@@ -25,7 +25,8 @@ impl<W: Widget> Widget for Panel<W> {
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .title(self.title);
+            .title(format!(" {} ", self.title))
+            .title_alignment(Alignment::Center);
         let inner = block.inner(area);
         block.render(area, buf);
         self.inner.render(inner, buf);

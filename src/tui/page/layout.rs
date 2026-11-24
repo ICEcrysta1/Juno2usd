@@ -1,7 +1,7 @@
 //! 整屏布局：上盒(banner+工作目录) + 左盒(选择) + 右盒(信息) + 底部提示。
 //! 只负责布局，框/列表/banner 均复用 controls。
 
-use crate::tui::controls::{Banner, Panel, SelectList};
+use crate::tui::controls::{Banner, Button, Panel, SelectList};
 use crate::tui::i18n::i18n;
 use ratatui::{
     buffer::Buffer,
@@ -21,6 +21,7 @@ pub struct Page<'a> {
     pub skel: &'a str,
     pub size: &'a str,
     pub running: bool,
+    pub progress: Option<(usize, usize)>,
 }
 
 impl Widget for Page<'_> {
@@ -28,7 +29,7 @@ impl Widget for Page<'_> {
         let rows = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(10),
+                Constraint::Length(12),
                 Constraint::Min(0),
                 Constraint::Length(1),
             ])
@@ -44,11 +45,14 @@ impl Widget for Page<'_> {
 
         let cols = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(30), Constraint::Min(0)])
+            .constraints([
+                Constraint::Length(30),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ])
             .split(rows[1]);
 
-        let mut list = SelectList::new(self.files.to_vec());
-        list.select(self.selected);
+        let list = SelectList::new(self.files.to_vec(), self.selected);
         Panel::new(i18n!(ui_choose), list).render(cols[0], buf);
 
         Panel::new(
@@ -61,14 +65,27 @@ impl Widget for Page<'_> {
                 size: self.size,
             },
         )
-        .render(cols[1], buf);
+        .render(cols[2], buf);
 
-        let hint = if self.running {
-            i18n!(ui_hint_running)
+        let hints = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(34),
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+            ])
+            .split(rows[2]);
+        Button::new(i18n!(ui_key_select)).render(hints[0], buf);
+        let mid = if self.running {
+            match self.progress {
+                Some((i, n)) => format!("{} {}/{}", i18n!(ui_running), i, n),
+                None => i18n!(ui_running).to_string(),
+            }
         } else {
-            i18n!(ui_hint)
+            i18n!(ui_key_convert).to_string()
         };
-        Paragraph::new(hint).render(rows[2], buf);
+        Button::new(mid).focused(self.running).render(hints[1], buf);
+        Button::new(i18n!(ui_key_quit)).render(hints[2], buf);
     }
 }
 
@@ -81,7 +98,7 @@ impl Widget for Top<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let parts = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(6), Constraint::Min(0)])
+            .constraints([Constraint::Min(0), Constraint::Length(1)])
             .split(area);
         Banner.render(parts[0], buf);
         Paragraph::new(format!("{}: {}", i18n!(ui_workspace), self.workspace))
@@ -114,6 +131,11 @@ impl Widget for Info<'_> {
             i18n!(ui_size),
             self.size,
         );
-        Paragraph::new(text).render(area, buf);
+        // 与选择列表一致的 2 列左缩进，不贴边框
+        let cols = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(2), Constraint::Min(0)])
+            .split(area);
+        Paragraph::new(text).render(cols[1], buf);
     }
 }
