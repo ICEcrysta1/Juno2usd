@@ -8,7 +8,7 @@ fn page(faces: Option<usize>, running: bool) -> Page<'static> {
         files: &[],
         selected: 0,
         input: "Input/a.xml",
-        output: "Output/a_rust.usda",
+        output: "Output/a.usda",
         parts: "3",
         connections: "2",
         materials: "1",

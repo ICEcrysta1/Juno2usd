@@ -6,12 +6,14 @@
 
 ### Added
 
+- TUI 实时感应 Input 目录变更（notify 事件监听，非轮询）：文件增删即刷新列表，按路径保留选中项，失效在途解析与已删文件缓存
 
 ### Breaking Changes
 
 
 ### Changed
 
+- TUI 输出文件名去掉 `_rust` 后缀：`Output/<stem>.usda`
 
 ### Fixed
 

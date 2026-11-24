@@ -9,7 +9,7 @@ fn fmt_size_kib_mib_boundary() {
     assert_eq!(fmt_size(5 * 1024 * 1024 / 2), "2.5 MiB");
 }
 
-/// 输出路径：Output/<stem>_rust.usda
+/// 输出路径：Output/<stem>.usda
 #[test]
 fn output_path_naming() {
     let (tx, rx) = mpsc::channel();
@@ -32,9 +32,10 @@ fn output_path_naming() {
         size_in: "…".into(),
         faces: None,
         skel: None,
+        _watcher: None,
     };
     assert_eq!(
         app.output_path().unwrap(),
-        PathBuf::from("Output/My Ship_rust.usda")
+        PathBuf::from("Output/My Ship.usda")
     );
 }

@@ -15,3 +15,5 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde-saphyr = "2.2.0"
 # TUI 框架（crossterm 经 ratatui 重导出，不单独引依赖）
 ratatui = "0.29"
+# Input 目录事件监听（Windows ReadDirectoryChangesW，事件推送非轮询）
+notify = "9.0.0"

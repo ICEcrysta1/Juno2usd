@@ -4,6 +4,7 @@
 
 use crate::core::convert::{self, Report};
 use crate::tui::page::Page;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -17,7 +18,7 @@ use ratatui::{
 use std::{
     collections::HashMap,
     io,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::mpsc,
     thread,
     time::{Duration, SystemTime},
@@ -40,6 +41,8 @@ enum Msg {
         stats: Option<Stats>,
         sig: Option<Sig>,
     },
+    /// Input 目录变更（notify 事件推送）
+    InputChanged,
 }
 
 fn fmt_size(len: u64) -> String {
@@ -75,28 +78,51 @@ struct App {
     size_in: String,
     faces: Option<usize>,
     skel: Option<usize>,
+    /// Input 目录监听器：存活期间事件经 tx 推送；创建失败为 None，退化为启动快照
+    _watcher: Option<RecommendedWatcher>,
+}
+
+/// 扫描 Input 目录 XML 文件（排序）并生成显示名
+fn scan_input() -> (Vec<PathBuf>, Vec<String>) {
+    let mut paths: Vec<PathBuf> = std::fs::read_dir("Input")
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("xml")))
+        .collect();
+    paths.sort();
+    let names = paths
+        .iter()
+        .map(|p| {
+            p.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    (paths, names)
 }
 
 impl App {
     fn new() -> Self {
-        let mut paths: Vec<PathBuf> = std::fs::read_dir("Input")
-            .into_iter()
-            .flatten()
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("xml")))
-            .collect();
-        paths.sort();
-        let names = paths
-            .iter()
-            .map(|p| {
-                p.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect();
+        let (paths, names) = scan_input();
         let (tx, rx) = mpsc::channel();
+        // Input 目录事件监听：notify 内部线程回调推送，非轮询
+        let watcher = notify::recommended_watcher({
+            let tx = tx.clone();
+            move |res: notify::Result<notify::Event>| {
+                if res.is_ok() {
+                    let _ = tx.send(Msg::InputChanged);
+                }
+            }
+        })
+        .ok()
+        .and_then(|mut w| {
+            w.watch(Path::new("Input"), RecursiveMode::NonRecursive)
+                .ok()
+                .map(|()| w)
+        });
         Self {
             paths,
             names,
@@ -116,19 +142,33 @@ impl App {
             size_in: "…".into(),
             faces: None,
             skel: None,
+            _watcher: watcher,
         }
     }
 
     fn output_path(&self) -> Option<PathBuf> {
         let p = self.paths.get(self.selected)?;
         let stem = p.file_stem()?.to_string_lossy().into_owned();
-        Some(PathBuf::from("Output").join(format!("{stem}_rust.usda")))
+        Some(PathBuf::from("Output").join(format!("{stem}.usda")))
     }
 
     fn apply(&mut self, s: Stats) {
         self.parts = Some(s.0);
         self.connections = Some(s.1);
         self.materials = Some(s.2);
+    }
+
+    /// Input 目录变更：重扫列表，按路径保留选中项，失效在途解析与已删文件缓存
+    fn rescan(&mut self) {
+        let old = self.paths.get(self.selected).cloned();
+        (self.paths, self.names) = scan_input();
+        self.selected = old
+            .and_then(|p| self.paths.iter().position(|x| *x == p))
+            .unwrap_or_else(|| self.selected.min(self.names.len().saturating_sub(1)));
+        self.cache.retain(|p, _| self.paths.contains(p));
+        self.epoch += 1;
+        self.parsed = None;
+        self.pending = None;
     }
 
     /// 每帧调用：缓存命中立即用；否则后台解析（旧 epoch 丢弃）
@@ -147,12 +187,12 @@ impl App {
         self.size_in = sig.map(|s| fmt_size(s.0)).unwrap_or_else(|| "…".into());
 
         // 缓存命中（签名一致）→ 立即显示
-        if let Some((cs, stats)) = self.cache.get(&p) {
-            if sig == Some(*cs) {
-                self.apply(*stats);
-                self.pending = None;
-                return;
-            }
+        if let Some((cs, stats)) = self.cache.get(&p)
+            && sig == Some(*cs)
+        {
+            self.apply(*stats);
+            self.pending = None;
+            return;
         }
         // 已在解析当前选中 → 等待
         if self.pending == Some(idx) {
@@ -243,6 +283,7 @@ impl App {
                         self.apply(s);
                     }
                 }
+                Msg::InputChanged => self.rescan(),
             }
         }
     }
