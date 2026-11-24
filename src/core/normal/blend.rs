@@ -5,12 +5,13 @@
 //! - 单开：开侧环法线对齐关侧（开侧迁就关侧，关侧保持不变）；
 //! - 双关：不平滑。
 //!
-//! 仅处理端面对接：两环须共轴（环平面法线平行），侧向连接（环平面垂直）跳过，
-//! 避免把嵌入侧面的零件端环误混合。端盖法线不参与（保持硬边）。
+//! 仅处理端面对接：两环须共轴（环平面法线平行），侧向连接（环平面垂直）跳过。
+//! 方形等带硬角的环整体不混合（90° 棱保持硬边），只平滑连续曲面环。
+//! 端盖法线不参与（保持硬边）。
 
 use crate::core::parse::connection::ConnectionTree;
 use crate::core::shapes::RawMesh;
-use crate::core::shapes::algo::transform::{Vec3, dot, normalize};
+use crate::core::shapes::algo::transform::{Vec3, cross, dot, normalize};
 use crate::core::shapes::components::model::{FaceGroup, Rim};
 use std::collections::HashMap;
 
@@ -18,17 +19,20 @@ use std::collections::HashMap;
 const COAXIAL_COS: f64 = 0.5;
 
 /// meshes/normals 按零件顺序索引，part_ids 为对应零件 ID。
+/// threshold_deg 为硬边阈值：带硬角的环（方形棱）不混合。
 pub fn blend_joints(
     meshes: &[RawMesh],
     normals: &mut [Vec<Vec3>],
     part_ids: &[String],
     connections: &ConnectionTree,
+    threshold_deg: f64,
 ) {
     let idx_by_id: HashMap<&str, usize> = part_ids
         .iter()
         .enumerate()
         .map(|(i, id)| (id.as_str(), i))
         .collect();
+    let cos_thresh = threshold_deg.to_radians().cos();
 
     for conn in &connections.connections {
         let (Some(&ia), Some(&ib)) = (
@@ -45,9 +49,13 @@ pub fn blend_joints(
             continue;
         }
         // 侧向连接（环平面不共轴）：跳过
-        let na = rim_normal(&meshes[ia], ra);
-        let nb = rim_normal(&meshes[ib], rb);
-        if dot(na, nb).abs() < COAXIAL_COS {
+        if dot(rim_normal(&meshes[ia], ra), rim_normal(&meshes[ib], rb)).abs() < COAXIAL_COS {
+            continue;
+        }
+        // 带硬角的环（方形截面）：整体不混合，保持 90° 硬边
+        if rim_has_hard_corner(&meshes[ia], ra, cos_thresh)
+            || rim_has_hard_corner(&meshes[ib], rb, cos_thresh)
+        {
             continue;
         }
         blend_rim_pair(meshes, normals, ia, ra, ib, rb);
@@ -99,7 +107,38 @@ fn dist(a: Vec3, b: Vec3) -> f64 {
     dot(d, d).sqrt()
 }
 
-/// 按开关规则混合一对对接环
+/// 环上是否存在硬角顶点（入射侧面法线夹角 > 阈值，如方形 90° 棱）
+fn rim_has_hard_corner(mesh: &RawMesh, rim: &Rim, cos_thresh: f64) -> bool {
+    rim.vertices.iter().any(|&v| {
+        let ns: Vec<Vec3> = mesh
+            .faces
+            .iter()
+            .enumerate()
+            .filter(|(fi, f)| mesh.face_groups[*fi] == FaceGroup::Side && f.contains(&v))
+            .map(|(_, f)| face_normal(mesh, f))
+            .collect();
+        for i in 0..ns.len() {
+            for j in i + 1..ns.len() {
+                if dot(ns[i], ns[j]) < cos_thresh {
+                    return true;
+                }
+            }
+        }
+        false
+    })
+}
+
+fn face_normal(mesh: &RawMesh, f: &[usize; 3]) -> Vec3 {
+    let p1 = mesh.vertices[f[0]];
+    let p2 = mesh.vertices[f[1]];
+    let p3 = mesh.vertices[f[2]];
+    normalize(cross(
+        [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]],
+        [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]],
+    ))
+}
+
+/// 按开关规则混合一对对接环（环已确认无硬角，逐顶点平均/对齐）
 fn blend_rim_pair(
     meshes: &[RawMesh],
     normals: &mut [Vec<Vec3>],

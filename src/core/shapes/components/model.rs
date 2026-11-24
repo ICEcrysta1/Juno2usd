@@ -31,6 +31,8 @@ pub struct RawMesh {
     pub face_groups: Vec<FaceGroup>,
     /// 强制平滑边（无序顶点对）：鼻锥环向等，覆盖角度判定
     pub smooth_edges: std::collections::HashSet<(usize, usize)>,
+    /// 强制锐边（无序顶点对）：方形截面纵向棱等，覆盖角度判定保持硬边
+    pub sharp_edges: std::collections::HashSet<(usize, usize)>,
     /// 尖点顶点（圆锥尖）：其入射边强制锐边
     pub apex_vertices: std::collections::HashSet<usize>,
     /// 硬点顶点（非圆锥缩 0 端）：仅该顶点面角取面法线（硬角），入射边不标锐→锥面仍光滑
@@ -49,6 +51,7 @@ impl RawMesh {
             faces: Vec::new(),
             face_groups: Vec::new(),
             smooth_edges: std::collections::HashSet::new(),
+            sharp_edges: std::collections::HashSet::new(),
             apex_vertices: std::collections::HashSet::new(),
             hard_vertices: std::collections::HashSet::new(),
             rims: Vec::new(),

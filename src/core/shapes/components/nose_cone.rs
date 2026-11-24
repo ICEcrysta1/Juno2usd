@@ -184,6 +184,20 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             mesh.apex_vertices.insert(rings[i][0]);
         }
     }
+
+    // 方形截面：所有侧面棱强制锐边（保持硬角）
+    if p.corner_radiuses.iter().all(|&r| r <= 0.001) {
+        for (fi, f) in mesh.faces.iter().enumerate() {
+            if mesh.face_groups[fi] != FaceGroup::Side {
+                continue;
+            }
+            for k in 0..3 {
+                let a = f[k];
+                let b = f[(k + 1) % 3];
+                mesh.sharp_edges.insert((a.min(b), a.max(b)));
+            }
+        }
+    }
     if let Some(ir) = &inner_rings {
         for (i, &ip) in inner_point_flags.iter().enumerate() {
             if ip {

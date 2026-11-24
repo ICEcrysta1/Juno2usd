@@ -158,6 +158,20 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
+    // 方形截面：所有侧面棱强制锐边（共面平面法线相同仍显平，90° 角保持硬）
+    if p.corner_radiuses.iter().all(|&r| r <= 0.001) {
+        for (fi, f) in mesh.faces.iter().enumerate() {
+            if mesh.face_groups[fi] != FaceGroup::Side {
+                continue;
+            }
+            for k in 0..3 {
+                let a = f[k];
+                let b = f[(k + 1) % 3];
+                mesh.sharp_edges.insert((a.min(b), a.max(b)));
+            }
+        }
+    }
+
     // 侧面与端盖（侧面/端盖分 pass 算法线）
     let mut f = Vec::new();
     stitch_side(

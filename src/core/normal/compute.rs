@@ -1,7 +1,6 @@
 //! 法线编排：侧面跑 Blender 自动平滑，端盖单独算平面法线，输出 faceVarying 法线。
 //!
-//! 侧面/端盖分 pass：焊接对接环边被侧+盖共 4 面共享，统一 pass 会判非流形锐边
-//! 而拆开侧面、破坏零件间平滑；分 pass 后侧面（焊接）光滑、端盖硬边。
+//! 侧面/端盖分 pass：端盖硬边独立计算，避免与侧面相互拆边。
 //! 世界变换由调用方经 algo::transform 完成（或直接在合并后的世界网格上计算）。
 
 use super::smooth;
@@ -24,9 +23,10 @@ pub fn compute(mesh: &RawMesh, sharp_edge_angle: f64) -> Vec<Vec3> {
 
     // 侧面：自动平滑
     let side_faces: Vec<[usize; 3]> = side.iter().map(|&i| mesh.faces[i]).collect();
-    // 尖点入射边强制锐边（圆锥顶点 / 缩 0 端保持尖锐）
+    // 强制锐边：零件声明（方形棱）+ 尖点入射边（圆锥顶点 / 缩 0 端保持尖锐）
     let mut sharp_edges: std::collections::HashSet<(usize, usize)> =
         std::collections::HashSet::new();
+    sharp_edges.extend(mesh.sharp_edges.iter().copied());
     if !mesh.apex_vertices.is_empty() {
         for f in &side_faces {
             for k in 0..3 {
@@ -225,7 +225,6 @@ mod tests {
             }
         }
         assert!(checked_tip > 0, "未找到尖端面");
-        // 底环侧面平滑：母线未标锐 → 底环面角法线被平均（≠面法线）
         // 底环侧面平滑：母线未标锐 → 底环面角法线被平均（≠面法线）
         let base_y = mesh.vertices[tip][1] - 2.0;
         let mut smoothed = 0;

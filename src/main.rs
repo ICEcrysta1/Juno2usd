@@ -52,8 +52,14 @@ fn main() {
     }
     println!("总计: {total_v} 顶点, {total_f} 面");
 
-    // 连接感知接头法线混合（flattenNormals 门控 + 共轴判据）
-    core::normal::blend_joints(&meshes, &mut normals, &part_ids, &model.connections);
+    // 连接感知接头法线混合（flattenNormals 门控 + 共轴判据 + 硬角保持）
+    core::normal::blend_joints(
+        &meshes,
+        &mut normals,
+        &part_ids,
+        &model.connections,
+        settings.normals.sharp_edge_angle,
+    );
 
     if let Some(dump_path) = args.get(2) {
         dump_json(dump_path, &meshes);
