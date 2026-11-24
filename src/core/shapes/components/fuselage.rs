@@ -158,36 +158,18 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
-    // 方形截面：所有侧面棱强制锐边（共面平面法线相同仍显平，90° 角保持硬）
-    if p.corner_radiuses.iter().all(|&r| r <= 0.001) {
-        for (fi, f) in mesh.faces.iter().enumerate() {
-            if mesh.face_groups[fi] != FaceGroup::Side {
-                continue;
-            }
-            for k in 0..3 {
-                let a = f[k];
-                let b = f[(k + 1) % 3];
-                mesh.sharp_edges.insert((a.min(b), a.max(b)));
-            }
-        }
-    }
-
-    // 侧面与端盖（侧面/端盖分 pass 算法线）
-    let mut f = Vec::new();
+    // 侧面与端盖（侧面保留四边面，端盖三角；侧面/端盖分 pass 算法线）
     stitch_side(
-        &mut f,
+        &mut mesh,
         &bottom_idx,
         &top_idx,
         bottom_is_point,
         top_is_point,
         false,
     );
-    mesh.add_faces(f, FaceGroup::Side);
 
     if let (Some(bi), Some(ti)) = (bottom_inner_idx, top_inner_idx) {
-        let mut f = Vec::new();
-        stitch_side(&mut f, &bi, &ti, bottom_is_point, top_is_point, true);
-        mesh.add_faces(f, FaceGroup::Side);
+        stitch_side(&mut mesh, &bi, &ti, bottom_is_point, top_is_point, true);
         if !bottom_is_point {
             let mut f = Vec::new();
             cap_annulus(&mut f, &bottom_idx, &bi, false);
@@ -214,6 +196,23 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             let mut f = Vec::new();
             cap_fan(&mut f, c, &top_idx, true);
             mesh.add_faces(f, FaceGroup::Cap);
+        }
+    }
+
+    // 四边面优化三角化（法线计算前）
+    super::super::algo::triangulate::triangulate(&mut mesh);
+
+    // 方形截面：所有侧面棱强制锐边（共面平面法线相同仍显平，90° 角保持硬）
+    if p.corner_radiuses.iter().all(|&r| r <= 0.001) {
+        for (fi, f) in mesh.faces.iter().enumerate() {
+            if mesh.face_groups[fi] != FaceGroup::Side {
+                continue;
+            }
+            for k in 0..3 {
+                let a = f[k];
+                let b = f[(k + 1) % 3];
+                mesh.sharp_edges.insert((a.min(b), a.max(b)));
+            }
         }
     }
 

@@ -125,11 +125,10 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
-    // 环间侧面（尖端环按点退化处理，直接发射三角扇）
-    let mut f = Vec::new();
+    // 环间侧面（尖端环按点退化发三角扇，其余保留四边面待 triangulate）
     for ring in 0..subdivisions {
         stitch_side(
-            &mut f,
+            &mut mesh,
             &rings[ring],
             &rings[ring + 1],
             tip_flags[ring],
@@ -137,14 +136,12 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
             false,
         );
     }
-    mesh.add_faces(f, FaceGroup::Side);
 
     let has_bottom_cap = p.bottom_scale[0] > 1e-6 || p.bottom_scale[1] > 1e-6;
     if let Some(ir) = &inner_rings {
-        let mut f = Vec::new();
         for ring in 0..subdivisions {
             stitch_side(
-                &mut f,
+                &mut mesh,
                 &ir[ring],
                 &ir[ring + 1],
                 inner_point_flags[ring],
@@ -152,7 +149,6 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
                 true,
             );
         }
-        mesh.add_faces(f, FaceGroup::Side);
         if has_bottom_cap {
             let mut f = Vec::new();
             cap_annulus(&mut f, &rings[0], &ir[0], false);
@@ -166,6 +162,9 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         cap_fan(&mut f, c, &rings[0], false);
         mesh.add_faces(f, FaceGroup::Cap);
     }
+
+    // 四边面优化三角化（法线计算前）
+    super::super::algo::triangulate::triangulate(&mut mesh);
 
     // 鼻锥为光滑旋转曲面：环向 perimeter 边强制平滑（消除分段轮廓折痕），
     // 竖直边仍走角度判定（teardrop 捏折等保留硬边）

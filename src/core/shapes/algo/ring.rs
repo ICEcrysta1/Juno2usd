@@ -5,6 +5,7 @@
 //! 环退化为点时共享单中心顶点，侧面退化为三角扇。
 
 use super::super::RawMesh;
+use super::super::components::model::FaceGroup;
 use super::transform::Vec3;
 
 /// 环 perimeter 边（无序顶点对）
@@ -42,9 +43,9 @@ fn push_tri(faces: &mut Vec<[usize; 3]>, a: usize, b: usize, c: usize, invert: b
     faces.push(if invert { [a, c, b] } else { [a, b, c] });
 }
 
-/// 两环之间的侧面；环为点时从中心发射三角扇
+/// 两环之间的侧面；环为点时从中心发射三角扇，否则记录四边面（待 triangulate 优化剖分）。
 pub fn stitch_side(
-    faces: &mut Vec<[usize; 3]>,
+    mesh: &mut RawMesh,
     lower: &[usize],
     upper: &[usize],
     lower_point: bool,
@@ -55,16 +56,24 @@ pub fn stitch_side(
     if lower_point && upper_point {
         return;
     }
+    let mut tris = Vec::new();
+    let mut quads = Vec::new();
     for i in 0..n {
         let j = (i + 1) % n;
         if lower_point {
-            push_tri(faces, lower[i], upper[i], upper[j], invert);
+            push_tri(&mut tris, lower[i], upper[i], upper[j], invert);
         } else if upper_point {
-            push_tri(faces, lower[i], upper[i], lower[j], invert);
+            push_tri(&mut tris, lower[i], upper[i], lower[j], invert);
         } else {
-            push_tri(faces, lower[i], upper[i], upper[j], invert);
-            push_tri(faces, lower[i], upper[j], lower[j], invert);
+            let q = [lower[i], upper[i], upper[j], lower[j]];
+            quads.push(if invert { [q[0], q[3], q[2], q[1]] } else { q });
         }
+    }
+    if !tris.is_empty() {
+        mesh.add_faces(tris, FaceGroup::Side);
+    }
+    if !quads.is_empty() {
+        mesh.add_quads(quads, FaceGroup::Side);
     }
 }
 

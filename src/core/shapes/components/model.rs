@@ -29,6 +29,10 @@ pub struct RawMesh {
     pub faces: Vec<[usize; 3]>,
     /// 与 faces 一一对应
     pub face_groups: Vec<FaceGroup>,
+    /// 侧面四边面（生成期保留，triangulate 优化剖分后转入 faces）
+    pub quads: Vec<[usize; 4]>,
+    /// 与 quads 一一对应
+    pub quad_groups: Vec<FaceGroup>,
     /// 强制平滑边（无序顶点对）：鼻锥环向等，覆盖角度判定
     pub smooth_edges: std::collections::HashSet<(usize, usize)>,
     /// 强制锐边（无序顶点对）：方形截面纵向棱等，覆盖角度判定保持硬边
@@ -50,6 +54,8 @@ impl RawMesh {
             uvs: Vec::new(),
             faces: Vec::new(),
             face_groups: Vec::new(),
+            quads: Vec::new(),
+            quad_groups: Vec::new(),
             smooth_edges: std::collections::HashSet::new(),
             sharp_edges: std::collections::HashSet::new(),
             apex_vertices: std::collections::HashSet::new(),
@@ -70,6 +76,13 @@ impl RawMesh {
         self.face_groups
             .resize(self.faces.len() + faces.len(), group);
         self.faces.extend(faces);
+    }
+
+    /// 追加一批四边面并打标签（待 triangulate 剖分）
+    pub fn add_quads(&mut self, quads: Vec<[usize; 4]>, group: FaceGroup) {
+        self.quad_groups
+            .resize(self.quads.len() + quads.len(), group);
+        self.quads.extend(quads);
     }
 
     /// 局部 → 世界：R·v + position
