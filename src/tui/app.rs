@@ -353,10 +353,16 @@ pub fn run() -> io::Result<()> {
             }
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => break Ok(()),
-                KeyCode::Up => app.selected = app.selected.saturating_sub(1),
+                KeyCode::Up => {
+                    if !app.names.is_empty() {
+                        // 顶部继续向上：循环回到列表底部
+                        app.selected = app.selected.checked_sub(1).unwrap_or(app.names.len() - 1);
+                    }
+                }
                 KeyCode::Down => {
                     if !app.names.is_empty() {
-                        app.selected = (app.selected + 1).min(app.names.len() - 1);
+                        // 底部继续向下：循环回到列表顶部
+                        app.selected = (app.selected + 1) % app.names.len();
                     }
                 }
                 KeyCode::Enter => app.start(),

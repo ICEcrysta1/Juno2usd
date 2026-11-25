@@ -14,6 +14,7 @@
 ### Changed
 
 - TUI 输出文件名去掉 `_rust` 后缀：`Output/<stem>.usda`
+- TUI 左侧栏文件选择改为循环：顶部继续向上回到列表底部，底部继续向下回到列表顶部
 
 ### Fixed
 
