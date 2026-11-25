@@ -4,7 +4,7 @@
 //! 供 inlet 复用；法线策略声明后续在此模块归属。
 
 use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, stitch_side};
-use super::super::algo::section::{apply_clamp, rounded_rect_point, shear_y, shrink_radial};
+use super::super::algo::section::{rounded_rect_point, shear_y, shrink_radial};
 use super::super::algo::transform::{Vec3, scale_ring};
 use super::model::{FaceGroup, RawMesh, Rim};
 use crate::core::parse::Part;
@@ -53,8 +53,14 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         let (bx, bz) = if bottom_is_point {
             (-p.offset[0], -p.offset[2])
         } else {
-            let (x, z) =
-                rounded_rect_point(angle, p.radius_x, p.radius_z, bottom_corners, bottom_deform);
+            let (x, z) = rounded_rect_point(
+                angle,
+                p.radius_x,
+                p.radius_z,
+                bottom_corners,
+                bottom_deform,
+                bottom_clamp,
+            );
             (
                 x * p.bottom_scale[0] - p.offset[0],
                 z * p.bottom_scale[1] - p.offset[2],
@@ -72,7 +78,14 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         let (tx, tz) = if top_is_point {
             (p.offset[0], p.offset[2])
         } else {
-            let (x, z) = rounded_rect_point(angle, p.radius_x, p.radius_z, top_corners, top_deform);
+            let (x, z) = rounded_rect_point(
+                angle,
+                p.radius_x,
+                p.radius_z,
+                top_corners,
+                top_deform,
+                top_clamp,
+            );
             (
                 x * p.top_scale[0] + p.offset[0],
                 z * p.top_scale[1] + p.offset[2],
@@ -88,15 +101,7 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         }
     }
 
-    // clamp 与 partScale
-    apply_clamp(&mut bottom, bottom_clamp);
-    apply_clamp(&mut top, top_clamp);
-    if let Some(inner) = &mut bottom_inner {
-        apply_clamp(inner, bottom_clamp);
-    }
-    if let Some(inner) = &mut top_inner {
-        apply_clamp(inner, top_clamp);
-    }
+    // partScale（clamp 已在单位空间随截面点裁剪，内环经 shrink_radial 继承）
     let has_scale = p.part_scale.iter().any(|v| (v - 1.0).abs() > 1e-6);
     if has_scale {
         scale_ring(&mut bottom, p.part_scale);

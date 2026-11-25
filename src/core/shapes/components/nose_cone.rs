@@ -4,7 +4,7 @@
 //! offset/形变/圆角/clamp 随 t 线性插值；尖端退化为单顶点。
 
 use super::super::algo::ring::{cap_annulus, cap_fan, emit_ring, perimeter_edges, stitch_side};
-use super::super::algo::section::{apply_clamp, rounded_rect_point, shear_y, shrink_radial};
+use super::super::algo::section::{rounded_rect_point, shear_y, shrink_radial};
 use super::super::algo::transform::{Vec3, scale_ring};
 use super::model::{FaceGroup, RawMesh, Rim};
 use crate::core::parse::Part;
@@ -74,11 +74,11 @@ pub fn generate(part: &Part, segments: usize) -> Option<RawMesh> {
         let mut coords: Vec<Vec3> = (0..segments)
             .map(|i| {
                 let angle = i as f64 * angle_step;
-                let (x, z) = rounded_rect_point(angle, p.radius_x, p.radius_z, &corners, deform);
+                let (x, z) =
+                    rounded_rect_point(angle, p.radius_x, p.radius_z, &corners, deform, &clamp);
                 [x * ratio_x + off_x, y, z * ratio_z + off_z]
             })
             .collect();
-        apply_clamp(&mut coords, &clamp);
         if has_scale {
             scale_ring(&mut coords, p.part_scale);
         }

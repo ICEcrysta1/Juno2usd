@@ -5,16 +5,19 @@ use std::f64::consts::PI;
 
 const TAU: f64 = 2.0 * PI;
 
-/// 圆角矩形截面点（支持水滴形变），返回 (x, z)
+/// 圆角矩形截面点（支持水滴形变与 clamp 裁剪），返回 (x, z)
 ///
 /// corner_radii 按象限取值：左上/右上/右下/左下；
 /// r≈0 为方形（射线求交），r≈1 为圆，中间为圆角矩形。
+/// clamp 顺序 x_neg/x_pos/z_neg/z_pos：在单位空间把形变后的坐标硬裁剪到
+/// [-|c_neg|, |c_pos|]，再乘半径（裁剪平面相对截面中心，不受 offset/scale 影响）。
 pub fn rounded_rect_point(
     angle: f64,
     radius_x: f64,
     radius_z: f64,
     corner_radii: &[f64],
     deformation: f64,
+    clamp: &[f64],
 ) -> (f64, f64) {
     let a = angle.rem_euclid(TAU);
 
@@ -30,7 +33,7 @@ pub fn rounded_rect_point(
 
     let r = corner_radii.get(corner_idx).copied().unwrap_or(1.0);
 
-    let (mut ux, uz) = if r <= 0.001 {
+    let (mut ux, mut uz) = if r <= 0.001 {
         square_point(a)
     } else if r >= 0.999 {
         (a.cos(), a.sin())
@@ -55,6 +58,11 @@ pub fn rounded_rect_point(
         ux *= 1.0 - deformation * (1.0 - width_ratio);
     }
 
+    // clamp：单位空间硬裁剪（取绝对值作为上下界，>=1 自然无操作）
+    let bound = |i: usize| clamp.get(i).map(|v| v.abs()).unwrap_or(1.0);
+    ux = ux.clamp(-bound(0), bound(1));
+    uz = uz.clamp(-bound(2), bound(3));
+
     (radius_x * ux, radius_z * uz)
 }
 
@@ -74,29 +82,6 @@ fn square_point(a: f64) -> (f64, f64) {
 fn angle_diff(a: f64, b: f64) -> f64 {
     let d = (a - b).abs();
     if d > PI { TAU - d } else { d }
-}
-
-/// clamp 挤压：clamp 值取绝对值作为比例，>=0.999 视为不挤压
-///
-/// 顺序：x_neg, x_pos, z_neg, z_pos
-pub fn apply_clamp(coords: &mut [Vec3], clamp: &[f64]) {
-    let ratio = |i: usize| clamp.get(i).map(|v| v.abs()).unwrap_or(1.0);
-    let (xn, xp, zn, zp) = (ratio(0), ratio(1), ratio(2), ratio(3));
-    if xn >= 0.999 && xp >= 0.999 && zn >= 0.999 && zp >= 0.999 {
-        return;
-    }
-    for c in coords.iter_mut() {
-        if c[0] < 0.0 && xn < 0.999 {
-            c[0] *= xn;
-        } else if c[0] > 0.0 && xp < 0.999 {
-            c[0] *= xp;
-        }
-        if c[2] < 0.0 && zn < 0.999 {
-            c[2] *= zn;
-        } else if c[2] > 0.0 && zp < 0.999 {
-            c[2] *= zp;
-        }
-    }
 }
 
 /// 竖向剪切：cut_depth = 2·offset_y·shear·t（t 由调用方给定）
