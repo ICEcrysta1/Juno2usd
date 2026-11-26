@@ -8,6 +8,14 @@ rust-version = "1.100"
 license = "MIT"
 publish = false
 
+[package]
+name = "juno2usd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
 [workspace.lints.clippy]
 await_holding_lock = "deny"
 expect_used = "deny"
@@ -43,14 +51,6 @@ unnecessary_lazy_evaluations = "deny"
 unnecessary_sort_by = "deny"
 unnecessary_to_owned = "deny"
 unwrap_used = "deny"
-
-[package]
-name = "juno2usd"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-publish.workspace = true
 
 [lints]
 workspace = true
