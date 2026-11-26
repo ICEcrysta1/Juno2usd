@@ -87,7 +87,7 @@ fn scan_input() -> (Vec<PathBuf>, Vec<String>) {
     let mut paths: Vec<PathBuf> = std::fs::read_dir("Input")
         .into_iter()
         .flatten()
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("xml")))
         .collect();

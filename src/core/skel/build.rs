@@ -30,19 +30,19 @@ pub fn build(parts: &[Part], tree: &ConnectionTree) -> Skeleton {
         .filter(|p| p.part_type.is_joint())
         .map(|p| p.id.clone())
         .collect();
-    let joint_set: HashSet<&str> = joint_ids.iter().map(|s| s.as_str()).collect();
+    let joint_set: HashSet<&str> = joint_ids.iter().map(String::as_str).collect();
     let part_by_id: HashMap<&str, &Part> = parts.iter().map(|p| (p.id.as_str(), p)).collect();
 
     // 沿零件树向上找最近关节父
     let mut parent_joint: HashMap<&str, &str> = HashMap::new();
     for j in &joint_ids {
-        let mut cur = tree.child_to_parent.get(j.as_str()).map(|s| s.as_str());
+        let mut cur = tree.child_to_parent.get(j.as_str()).map(String::as_str);
         while let Some(c) = cur {
             if joint_set.contains(c) {
                 parent_joint.insert(j.as_str(), c);
                 break;
             }
-            cur = tree.child_to_parent.get(c).map(|s| s.as_str());
+            cur = tree.child_to_parent.get(c).map(String::as_str);
         }
     }
     let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -53,7 +53,7 @@ pub fn build(parts: &[Part], tree: &ConnectionTree) -> Skeleton {
     }
     let roots: Vec<&str> = joint_ids
         .iter()
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .filter(|j| !parent_joint.contains_key(j))
         .collect();
 

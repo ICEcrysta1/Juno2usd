@@ -1,0 +1,3 @@
+# 测试代码允许直接断言，生产代码统一显式处理错误。
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true

@@ -184,7 +184,7 @@ fn hollow_point_end_separate_apex() {
         .iter()
         .map(|&v| mesh.vertices[v][1])
         .collect();
-    ys.sort_by(|a, b| a.total_cmp(b));
+    ys.sort_by(f64::total_cmp);
     let tip_y = mesh.vertices.iter().map(|v| v[1]).fold(f64::MIN, f64::max);
     assert!((ys[1] - tip_y).abs() < 1e-6, "外尖点应在顶端");
     assert!(ys[0] < ys[1] - 1e-6, "内尖点应内缩，保留壁厚");
@@ -206,6 +206,6 @@ fn hollow_nose_cone_separate_apex() {
         .iter()
         .map(|&v| mesh.vertices[v][1])
         .collect();
-    ys.sort_by(|a, b| a.total_cmp(b));
+    ys.sort_by(f64::total_cmp);
     assert!(ys[0] < ys[1] - 1e-6, "内尖点应内缩，保留壁厚");
 }

@@ -141,7 +141,9 @@ fn blend_rim_pair(
             let mut wa: Vec<(usize, Vec3)> = Vec::new();
             let mut wb: Vec<(usize, Vec3)> = Vec::new();
             for (ka, &va) in ra.vertices.iter().enumerate() {
-                let kb = nearest(&meshes[ia], va, &meshes[ib], &rb.vertices);
+                let Some(kb) = nearest(&meshes[ia], va, &meshes[ib], &rb.vertices) else {
+                    continue;
+                };
                 let n = normalize([
                     na[ka][0] + nb[kb][0],
                     na[ka][1] + nb[kb][1],
@@ -159,7 +161,9 @@ fn blend_rim_pair(
         (true, false) => {
             let mut wa: Vec<(usize, Vec3)> = Vec::new();
             for &va in &ra.vertices {
-                let kb = nearest(&meshes[ia], va, &meshes[ib], &rb.vertices);
+                let Some(kb) = nearest(&meshes[ia], va, &meshes[ib], &rb.vertices) else {
+                    continue;
+                };
                 if dot(nb[kb], nb[kb]) > 0.5 {
                     wa.push((va, nb[kb]));
                 }
@@ -170,7 +174,9 @@ fn blend_rim_pair(
         (false, true) => {
             let mut wb: Vec<(usize, Vec3)> = Vec::new();
             for &vb in &rb.vertices {
-                let ka = nearest(&meshes[ib], vb, &meshes[ia], &ra.vertices);
+                let Some(ka) = nearest(&meshes[ib], vb, &meshes[ia], &ra.vertices) else {
+                    continue;
+                };
                 if dot(na[ka], na[ka]) > 0.5 {
                     wb.push((vb, na[ka]));
                 }
@@ -181,14 +187,12 @@ fn blend_rim_pair(
     }
 }
 
-/// 目标顶点在另一环中的最近邻索引
-fn nearest(mesh: &RawMesh, v: usize, other: &RawMesh, ring: &[usize]) -> usize {
+/// 目标顶点在另一环中的最近邻索引（环为空时无邻居）
+fn nearest(mesh: &RawMesh, v: usize, other: &RawMesh, ring: &[usize]) -> Option<usize> {
     let p = mesh.vertices[v];
-    (0..ring.len())
-        .min_by(|&x, &y| {
-            dist(p, other.vertices[ring[x]]).total_cmp(&dist(p, other.vertices[ring[y]]))
-        })
-        .unwrap()
+    (0..ring.len()).min_by(|&x, &y| {
+        dist(p, other.vertices[ring[x]]).total_cmp(&dist(p, other.vertices[ring[y]]))
+    })
 }
 
 /// 顶点侧面代表法线：该顶点所有侧面面角法线的平均

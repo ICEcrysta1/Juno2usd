@@ -45,6 +45,6 @@ fn hollow_cone_separate_apex() {
     let m = generate(&cone(0.1), 8).unwrap();
     assert_eq!(m.apex_vertices.len(), 2);
     let mut ys: Vec<f64> = m.apex_vertices.iter().map(|&v| m.vertices[v][1]).collect();
-    ys.sort_by(|a, b| a.total_cmp(b));
+    ys.sort_by(f64::total_cmp);
     assert!(ys[0] < ys[1] - 1e-6);
 }

@@ -74,7 +74,7 @@ fn both_smooth_averages_rim_normals() {
     let ra = &meshes[0].rims[1];
     let rb = &meshes[1].rims[0];
     for &va in &ra.vertices {
-        let kb = nearest(&meshes[0], va, &meshes[1], &rb.vertices);
+        let kb = nearest(&meshes[0], va, &meshes[1], &rb.vertices).expect("对接环非空");
         let na = vertex_side_normal(&meshes[0], &normals[0], va);
         let nb = vertex_side_normal(&meshes[1], &normals[1], rb.vertices[kb]);
         assert!(dot(na, nb) > 0.999, "双开应互相平均");
@@ -115,7 +115,7 @@ fn single_smooth_aligns_to_closed() {
     );
     let rb = &meshes[1].rims[0];
     for &va in &meshes[0].rims[1].vertices {
-        let kb = nearest(&meshes[0], va, &meshes[1], &rb.vertices);
+        let kb = nearest(&meshes[0], va, &meshes[1], &rb.vertices).expect("对接环非空");
         let na = vertex_side_normal(&meshes[0], &normals[0], va);
         assert!(
             dot(na, radial(meshes[1].vertices[rb.vertices[kb]])) > 0.99,
